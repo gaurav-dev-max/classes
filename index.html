@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LMS Pro</title>
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-card: rgba(30, 41, 59, 0.85);
+      --accent: #6366f1;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border-light: rgba(255, 255, 255, 0.1);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+    body { background-color: var(--bg-main); color: var(--text-main); padding: 20px; min-height: 100vh; }
+    header { font-size: 1.4rem; font-weight: 800; color: #818cf8; margin-bottom: 24px; text-align: center; }
+    .card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 24px; max-width: 400px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    h2 { font-size: 1.2rem; margin-bottom: 16px; text-align: center; }
+    input { width: 100%; padding: 14px; margin-bottom: 12px; background: #0f172a; border: 1px solid var(--border-light); border-radius: 8px; color: #fff; font-size: 1rem; outline: none; }
+    input:focus { border-color: var(--accent); }
+    .btn { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 4px; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border-light); margin-top: 10px; }
+    .status-msg { margin-top: 12px; font-size: 0.85rem; text-align: center; color: #f87171; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header>⚡ LMS PRO</header>
+
+  <main id="app">
+    <div class="card">
+      <h2>Welcome Back</h2>
+      <input type="email" id="email" placeholder="Email Address">
+      <input type="password" id="password" placeholder="Password">
+      <button class="btn" onclick="login()">Login</button>
+      <button class="btn btn-secondary" onclick="signUp()">Create Account</button>
+      <div id="status" class="status-msg"></div>
+    </div>
+  </main>
+
+  <script>
+    // Paste your exact Supabase credentials here!
+    const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+    const SUPABASE_ANON_KEY = 'YOUR_ACTUAL_ANON_KEY';
+
+    let db;
+    try {
+      db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      document.getElementById('status').innerText = 'Configuration Error: Add your Supabase credentials in index.html';
+    }
+
+    async function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const status = document.getElementById('status');
+      
+      if (!email || !password) { status.innerText = 'Please fill in both fields'; return; }
+      status.style.color = '#818cf8'; status.innerText = 'Logging in...';
+
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
+      if (error) { status.style.color = '#f87171'; status.innerText = error.message; }
+      else { renderHome(data.user.email); }
+    }
+
+    async function signUp() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const status = document.getElementById('status');
+      
+      if (!email || !password) { status.innerText = 'Please fill in both fields'; return; }
+      status.style.color = '#818cf8'; status.innerText = 'Creating account...';
+
+      const { data, error } = await db.auth.signUp({ email, password });
+      if (error) { status.style.color = '#f87171'; status.innerText = error.message; }
+      else { 
+        status.style.color = '#4ade80'; 
+        status.innerText = 'Account created successfully! You can now log in.'; 
+      }
+    }
+
+    function renderHome(email) {
+      document.getElementById('app').innerHTML = `
+        <div class="card" style="text-align:center;">
+          <h2 style="color:#4ade80;">LoggedIn Successfully!</h2>
+          <p style="color:var(--text-sub); margin: 12px 0;">${email}</p>
+          <button class="btn btn-secondary" onclick="location.reload()">Logout</button>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
