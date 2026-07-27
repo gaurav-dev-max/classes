@@ -1,6 +1,6 @@
 // Initialize Supabase Client
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://hizlhtxaypzgnizmjnqm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpemxodHhheXB6Z25pem1qbnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNTY5NzksImV4cCI6MjEwMDczMjk3OX0.HH9NaWUl5HSgzoy4w6W_57ylMRsIZS41LtGp7wM7V00';
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // State Management
