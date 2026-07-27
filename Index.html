@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LMS Pro</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0F172A">
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header>
+    <div class="brand-title">⚡ LMS PRO</div>
+    <div id="user-profile-badge" style="font-size:0.85rem; color: var(--text-sub);">Guest</div>
+  </header>
+
+  <main class="container" id="app-root">
+    <!-- Dynamic Views Will Render Here -->
+  </main>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active" onclick="navigate('dashboard')">🏠 Home</div>
+    <div class="nav-item" onclick="navigate('courses')">📚 Courses</div>
+    <div class="nav-item" onclick="navigate('tests')">📝 Tests</div>
+    <div class="nav-item" onclick="navigate('profile')">👤 Profile</div>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
