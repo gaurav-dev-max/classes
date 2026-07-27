@@ -15,43 +15,51 @@
       --radius: 14px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
-    body { background-color: var(--bg-main); color: var(--text-main); padding: 20px; min-height: 100vh; }
-    header { font-size: 1.4rem; font-weight: 800; color: #818cf8; margin-bottom: 24px; text-align: center; }
-    .card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 24px; max-width: 400px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
-    h2 { font-size: 1.2rem; margin-bottom: 16px; text-align: center; }
-    input { width: 100%; padding: 14px; margin-bottom: 12px; background: #0f172a; border: 1px solid var(--border-light); border-radius: 8px; color: #fff; font-size: 1rem; outline: none; }
-    input:focus { border-color: var(--accent); }
-    .btn { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 4px; }
-    .btn-secondary { background: transparent; border: 1px solid var(--border-light); margin-top: 10px; }
-    .status-msg { margin-top: 12px; font-size: 0.85rem; text-align: center; color: #f87171; }
+    body { background-color: var(--bg-main); color: var(--text-main); padding: 16px; min-height: 100vh; padding-bottom: 60px; }
+    header { font-size: 1.4rem; font-weight: 800; color: #818cf8; margin-bottom: 20px; text-align: center; display:flex; justify-space-between; align-items:center; }
+    .card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    h2, h3, h4 { margin-bottom: 10px; }
+    input, textarea { width: 100%; padding: 12px; margin-bottom: 10px; background: #0f172a; border: 1px solid var(--border-light); border-radius: 8px; color: #fff; font-size: 0.95rem; outline: none; }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    .btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 4px; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border-light); }
+    .status-msg { margin-top: 10px; font-size: 0.85rem; text-align: center; color: #f87171; }
+    .badge { font-size:0.75rem; background:rgba(99,102,241,0.2); color:#818cf8; padding:4px 8px; border-radius:12px; font-weight:bold; }
+    .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
+    .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-  <header>⚡ LMS PRO</header>
+  <header>
+    <span>⚡ LMS PRO</span>
+    <span id="role-badge" class="badge">GUEST</span>
+  </header>
 
   <main id="app">
-    <div class="card">
+    <div class="card" style="max-width:400px; margin: 0 auto;">
       <h2>Welcome Back</h2>
       <input type="email" id="email" placeholder="Email Address">
       <input type="password" id="password" placeholder="Password">
       <button class="btn" onclick="login()">Login</button>
-      <button class="btn btn-secondary" onclick="signUp()">Create Account</button>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="signUp()">Create Account</button>
       <div id="status" class="status-msg"></div>
     </div>
   </main>
 
   <script>
-    // Paste your exact Supabase credentials here!
-    const SUPABASE_URL =  'https://hizlhtxaypzgnizmjnqm.supabase.co';
+    const SUPABASE_URL = 'https://hizlhtxaypzgnizmjnqm.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpemxodHhheXB6Z25pem1qbnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNTY5NzksImV4cCI6MjEwMDczMjk3OX0.HH9NaWUl5HSgzoy4w6W_57ylMRsIZS41LtGp7wM7V00';
 
     let db;
+    let currentUser = null;
+    let userRole = 'student';
+
     try {
       db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     } catch (e) {
-      document.getElementById('status').innerText = 'Configuration Error: Add your Supabase credentials in index.html';
+      document.getElementById('status').innerText = 'Configuration Error: Add Supabase Credentials';
     }
 
     async function login() {
@@ -63,8 +71,13 @@
       status.style.color = '#818cf8'; status.innerText = 'Logging in...';
 
       const { data, error } = await db.auth.signInWithPassword({ email, password });
-      if (error) { status.style.color = '#f87171'; status.innerText = error.message; }
-      else { renderHome(data.user.email); }
+      if (error) { 
+        status.style.color = '#f87171'; status.innerText = error.message; 
+      } else { 
+        currentUser = data.user;
+        await fetchProfile();
+        renderDashboard(); 
+      }
     }
 
     async function signUp() {
@@ -76,21 +89,166 @@
       status.style.color = '#818cf8'; status.innerText = 'Creating account...';
 
       const { data, error } = await db.auth.signUp({ email, password });
-      if (error) { status.style.color = '#f87171'; status.innerText = error.message; }
-      else { 
-        status.style.color = '#4ade80'; 
-        status.innerText = 'Account created successfully! You can now log in.'; 
+      if (error) { 
+        status.style.color = '#f87171'; status.innerText = error.message; 
+      } else { 
+        if (data.user) {
+          await db.from('profiles').insert([{ id: data.user.id, full_name: email.split('@')[0], role: 'student' }]);
+        }
+        status.style.color = '#4ade80'; status.innerText = 'Account created! You can now log in.'; 
       }
     }
 
-    function renderHome(email) {
-      document.getElementById('app').innerHTML = `
-        <div class="card" style="text-align:center;">
-          <h2 style="color:#4ade80;">LoggedIn Successfully!</h2>
-          <p style="color:var(--text-sub); margin: 12px 0;">${email}</p>
-          <button class="btn btn-secondary" onclick="location.reload()">Logout</button>
+    async function fetchProfile() {
+      if (!currentUser) return;
+      const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).single();
+      if (data) { 
+        userRole = data.role; 
+        document.getElementById('role-badge').innerText = userRole.toUpperCase();
+      }
+    }
+
+    async function renderDashboard() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Welcome, ${currentUser.email.split('@')[0]}</h3>
+            <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:0.8rem;" onclick="location.reload()">Logout</button>
+          </div>
         </div>
+
+        ${userRole === 'admin' ? `
+          <div class="card" style="border-color: var(--accent);">
+            <h3>➕ Create New Course</h3>
+            <input type="text" id="course-title" placeholder="Course Title (e.g. Financial Accounting)">
+            <input type="text" id="course-desc" placeholder="Course Description">
+            <button class="btn" onclick="addNewCourse()">Publish Course</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin: 16px 0 10px 0;">All Courses</h3>
+        <div id="course-list">Loading courses...</div>
       `;
+
+      loadCourses();
+    }
+
+    async function loadCourses() {
+      const list = document.getElementById('course-list');
+      const { data: courses, error } = await db.from('courses').select('*');
+
+      if (error || !courses || courses.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:10px;">No courses available yet.</p>`;
+        return;
+      }
+
+      list.innerHTML = courses.map(c => `
+        <div class="card">
+          <h4>${c.title}</h4>
+          <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:12px;">${c.description || 'No description'}</p>
+          <button class="btn btn-secondary" onclick="openCourse('${c.id}', '${c.title}')">Manage Content & Content View ➔</button>
+        </div>
+      `).join('');
+    }
+
+    async function addNewCourse() {
+      const title = document.getElementById('course-title').value;
+      const description = document.getElementById('course-desc').value;
+      if (!title) { alert('Enter a title'); return; }
+
+      const { error } = await db.from('courses').insert([{ title, description }]);
+      if (error) alert(error.message);
+      else { alert('Course published!'); loadCourses(); }
+    }
+
+    async function openCourse(courseId, courseTitle) {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back to Courses</button>
+        <h2>${courseTitle}</h2>
+
+        ${userRole === 'admin' ? `
+          <div class="card" style="border-color: var(--accent);">
+            <h4>🎥 Add Video Lecture</h4>
+            <input type="text" id="lec-title" placeholder="Lecture Title">
+            <input type="text" id="lec-url" placeholder="YouTube Video URL">
+            <button class="btn" onclick="addLecture('${courseId}', '${courseTitle}')">Add Lecture</button>
+          </div>
+
+          <div class="card" style="border-color: var(--accent);">
+            <h4>📄 Add Study Material / PDF</h4>
+            <input type="text" id="mat-title" placeholder="Material Title (e.g. Chapter 1 Notes)">
+            <input type="text" id="mat-url" placeholder="Google Drive / PDF Document Link">
+            <button class="btn" onclick="addMaterial('${courseId}', '${courseTitle}')">Add Material</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">🎥 Lectures</h3>
+        <div id="lectures-list">Loading...</div>
+
+        <h3 style="margin-top:20px;">📄 Study Materials</h3>
+        <div id="materials-list">Loading...</div>
+      `;
+
+      loadCourseContent(courseId);
+    }
+
+    async function loadCourseContent(courseId) {
+      const { data: lectures } = await db.from('lectures').select('*').eq('course_id', courseId);
+      const { data: materials } = await db.from('study_materials').select('*').eq('course_id', courseId);
+
+      const lecTarget = document.getElementById('lectures-list');
+      if (!lectures || lectures.length === 0) {
+        lecTarget.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures added yet.</p>`;
+      } else {
+        lecTarget.innerHTML = lectures.map(l => `
+          <div class="card">
+            <h4>${l.title}</h4>
+            <div class="video-wrapper">
+              <iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      const matTarget = document.getElementById('materials-list');
+      if (!materials || materials.length === 0) {
+        matTarget.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No materials added yet.</p>`;
+      } else {
+        matTarget.innerHTML = materials.map(m => `
+          <div class="card">
+            <h4>${m.title}</h4>
+            <a href="${m.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-top:8px;">Open Document 📄</a>
+          </div>
+        `).join('');
+      }
+    }
+
+    function formatEmbedUrl(url) {
+      if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
+      if (url.includes('youtu.be/')) return url.replace('youtu.be/', 'youtube.com/embed/');
+      return url;
+    }
+
+    async function addLecture(courseId, courseTitle) {
+      const title = document.getElementById('lec-title').value;
+      const video_url = document.getElementById('lec-url').value;
+      if (!title || !video_url) { alert('Fill all fields'); return; }
+
+      const { error } = await db.from('lectures').insert([{ course_id: courseId, title, video_url }]);
+      if (error) alert(error.message);
+      else { alert('Lecture added!'); openCourse(courseId, courseTitle); }
+    }
+
+    async function addMaterial(courseId, courseTitle) {
+      const title = document.getElementById('mat-title').value;
+      const file_url = document.getElementById('mat-url').value;
+      if (!title || !file_url) { alert('Fill all fields'); return; }
+
+      const { error } = await db.from('study_materials').insert([{ course_id: courseId, title, file_url }]);
+      if (error) alert(error.message);
+      else { alert('Material added!'); openCourse(courseId, courseTitle); }
     }
   </script>
 </body>
