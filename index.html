@@ -63,6 +63,21 @@
       font-size: 1.2rem;
       margin-bottom: 2px;
     }
+    .filter-btn {
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border-light);
+      background: transparent;
+      color: var(--text-sub);
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-right: 6px;
+    }
+    .filter-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -111,6 +126,7 @@
     let currentUser = null;
     let userRole = 'student';
     let currentTab = 'home';
+    let currentDoubtFilter = 'all';
 
     try {
       db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -154,7 +170,7 @@
       }
     }
 
-    async function signUp() {
+async function signUp() {
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
       const status = document.getElementById('status');
@@ -246,7 +262,7 @@
         <div class="card" style="border-color: rgba(99,102,241,0.4);">
           <h3>⚡ Quick Actions</h3>
           <button class="btn" onclick="switchTab('courses')">📚 Browse Courses</button>
-          <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('doubts')">💬 Ask a Doubt</button>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('doubts')">💬 Ask / View Doubts</button>
         </div>
       `;
     }
@@ -338,7 +354,7 @@
       loadSubjects(courseId, courseTitle);
     }
 
-    async function addSubject(courseId, courseTitle) {
+async function addSubject(courseId, courseTitle) {
       const title = document.getElementById('subj-title').value;
       const level_name = document.getElementById('subj-level').value || 'General Level';
       const teacher_id = document.getElementById('subj-teacher').value || null;
@@ -419,7 +435,6 @@
       `).join('');
     }
 
-    // CHAPTER CONTENT (Lectures, Notes, Assignments, Quizzes)
     async function openChapterContent(chapterId, chapterTitle, canManage) {
       const app = document.getElementById('app');
 
@@ -450,7 +465,7 @@
             <button class="btn" style="background:#d97706;" onclick="addChapterAssignment('${chapterId}', '${chapterTitle}', ${canManage})">Publish Assignment</button>
           </div>
 
-    <div class="card" style="border-color: #c084fc;">
+          <div class="card" style="border-color: #c084fc;">
             <h4>🧪 Create Chapter Quiz / Test</h4>
             <input type="text" id="test-title" placeholder="Test Title">
             <input type="text" id="test-q" placeholder="Question">
@@ -490,7 +505,6 @@
       const { data: assignments } = await db.from('assignments').select('*').eq('chapter_id', chapterId);
       const { data: tests } = await db.from('tests').select('*').eq('chapter_id', chapterId);
 
-      // Render Lectures
       const lecTarget = document.getElementById('chapter-lectures');
       lecTarget.innerHTML = (!lectures || lectures.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures in this chapter yet.</p>`
@@ -501,7 +515,6 @@
           </div>
         `).join('');
 
-      // Render Materials
       const matTarget = document.getElementById('chapter-materials');
       matTarget.innerHTML = (!materials || materials.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes in this chapter yet.</p>`
@@ -512,7 +525,6 @@
           </div>
         `).join('');
 
-      // Render Assignments
       const assTarget = document.getElementById('chapter-assignments');
       assTarget.innerHTML = (!assignments || assignments.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No assignments posted yet.</p>`
@@ -535,7 +547,6 @@
           </div>
         `).join('');
 
-      // Render Tests
       const testTarget = document.getElementById('chapter-tests');
       testTarget.innerHTML = (!tests || tests.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No quizzes created for this chapter yet.</p>`
@@ -668,6 +679,7 @@
       }
     }
 
+    // UPGRADED DOUBTS PORTAL
     async function renderDoubtsTab() {
       const app = document.getElementById('app');
       const { data: subjects } = await db.from('subjects').select('id, title');
@@ -687,11 +699,21 @@
           </div>
         ` : ''}
 
-        <h3 style="margin-top:20px;">📋 Recent Doubts</h3>
+        <div style="margin: 16px 0 10px 0; display:flex; align-items:center;">
+          <button class="filter-btn ${currentDoubtFilter === 'all' ? 'active' : ''}" onclick="filterDoubts('all')">All</button>
+          <button class="filter-btn ${currentDoubtFilter === 'pending' ? 'active' : ''}" onclick="filterDoubts('pending')">Pending</button>
+          <button class="filter-btn ${currentDoubtFilter === 'resolved' ? 'active' : ''}" onclick="filterDoubts('resolved')">Resolved</button>
+        </div>
+
         <div id="doubts-queue">Loading doubts...</div>
       `;
 
       loadDoubtsQueue();
+    }
+
+    function filterDoubts(status) {
+      currentDoubtFilter = status;
+      renderDoubtsTab();
     }
 
     async function submitDoubt() {
@@ -699,9 +721,7 @@
       const question_text = document.getElementById('doubt-text').value;
       const image_url = document.getElementById('doubt-img').value;
 
-      if (!subject_id || !question_text)
-
-{ alert('Please select a subject and type your question.'); return; }
+      if (!subject_id || !question_text) { alert('Please select a subject and type your question.'); return; }
 
       await db.from('doubts').insert([{
         student_id: currentUser.id,
@@ -716,12 +736,16 @@
 
     async function loadDoubtsQueue() {
       const queue = document.getElementById('doubts-queue');
-      const { data: doubts } = await db.from('doubts')
-        .select('*, subjects(title), profiles!student_id(full_name)')
-        .order('created_at', { ascending: false });
+      let query = db.from('doubts').select('*, subjects(title), profiles!student_id(full_name)').order('created_at', { ascending: false });
+
+      if (currentDoubtFilter !== 'all') {
+        query = query.eq('status', currentDoubtFilter);
+      }
+
+      const { data: doubts } = await query;
 
       if (!doubts || doubts.length === 0) {
-        queue.innerHTML = `<p style="color:var(--text-sub);">No doubts posted yet.</p>`;
+        queue.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:20px 0;">No ${currentDoubtFilter === 'all' ? '' : currentDoubtFilter} doubts found.</p>`;
         return;
       }
 
@@ -767,7 +791,7 @@
       loadDoubtsQueue();
     }
 
-    async function renderProfileTab() {
+async function renderProfileTab() {
       const app = document.getElementById('app');
       app.innerHTML = `
         <div class="card">
