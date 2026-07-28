@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -170,7 +170,7 @@
       }
     }
 
-async function signUp() {
+    async function signUp() {
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
       const status = document.getElementById('status');
@@ -199,8 +199,7 @@ async function signUp() {
         alert('SignUp Error: ' + err.message);
       }
     }
-
-    async function fetchProfile() {
+async function fetchProfile() {
       if (!currentUser) return;
       try {
         const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).maybeSingle();
@@ -244,6 +243,20 @@ async function signUp() {
           <p style="color:var(--text-sub); font-size:0.85rem; margin-top:4px;">Role: <strong style="color:var(--accent);">${userRole.toUpperCase()}</strong></p>
         </div>
 
+        ${isStaff() ? `
+          <div class="card" style="border-color: #f59e0b;">
+            <h3>📢 Broadcast Announcement</h3>
+            <input type="text" id="anc-title" placeholder="Announcement Title">
+            <textarea id="anc-msg" placeholder="Announcement Details / Instructions..."></textarea>
+            <select id="anc-priority">
+              <option value="general">Priority: General Notification 📢</option>
+              <option value="urgent">Priority: ⚡ Urgent Notice</option>
+              <option value="schedule">Priority: 📅 Class / Exam Schedule</option>
+            </select>
+            <button class="btn" style="background:#d97706;" onclick="postAnnouncement()">Broadcast to Students</button>
+          </div>
+        ` : ''}
+
         ${userRole === 'admin' ? `
           <div class="card" style="border-color: #c084fc;">
             <h3>👥 Add New User Account</h3>
@@ -263,10 +276,59 @@ async function signUp() {
           <h3>⚡ Quick Actions</h3>
           <button class="btn" onclick="switchTab('courses')">📚 Browse Courses</button>
           <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('doubts')">💬 Ask / View Doubts</button>
-<a href="announcements.html" class="btn btn-secondary" style="margin-top:8px; text-decoration:none; display:block; text-align:center;">📢 View Broadcasts & Announcements</a>
-
         </div>
+
+        <h3 style="margin-top:20px;">📢 Latest Broadcasts & Announcements</h3>
+        <div id="announcements-feed" style="margin-top:10px;">Loading announcements...</div>
       `;
+
+      loadAnnouncements();
+    }
+
+    async function postAnnouncement() {
+      const title = document.getElementById('anc-title').value;
+      const message = document.getElementById('anc-msg').value;
+      const priority = document.getElementById('anc-priority').value;
+
+      if (!title || !message) { alert('Please enter both title and message.'); return; }
+
+      const { error } = await db.from('announcements').insert([{ title, message, priority }]);
+      if (error) {
+        alert('Error posting announcement: ' + error.message);
+      } else {
+        alert('Announcement published successfully!');
+        renderHomeTab();
+      }
+    }
+
+    async function loadAnnouncements() {
+      const feed = document.getElementById('announcements-feed');
+      const { data: list, error } = await db.from('announcements').select('*').order('created_at', { ascending: false });
+
+      if (error) {
+        feed.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error loading broadcasts: ${error.message}</p>`;
+        return;
+      }
+
+      if (!list || list.length === 0) {
+        feed.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:12px 0;">No announcements posted yet.</p>`;
+        return;
+      }
+
+      feed.innerHTML = list.map(a => `
+        <div class="card" style="border-color: ${a.priority === 'urgent' ? '#f87171' : (a.priority === 'schedule' ? '#38bdf8' : 'rgba(99,102,241,0.3)')};">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h4>${a.title}</h4>
+            <span class="badge" style="background:${a.priority === 'urgent' ? 'rgba(248,113,113,0.2)' : 'rgba(99,102,241,0.2)'}; color:${a.priority === 'urgent' ? '#f87171' : '#818cf8'};">
+              ${(a.priority || 'GENERAL').toUpperCase()}
+            </span>
+          </div>
+          <p style="color:var(--text-sub); font-size:0.9rem; line-height:1.4;">${a.message}</p>
+          <span style="font-size:0.75rem; color:var(--text-sub); margin-top:10px; display:block;">
+            📅 ${new Date(a.created_at).toLocaleDateString()}
+          </span>
+        </div>
+      `).join('');
     }
 
     async function adminCreateUser() {
@@ -320,7 +382,7 @@ async function signUp() {
       `).join('');
     }
 
-    async function addNewCourse() {
+async function addNewCourse() {
       const title = document.getElementById('course-title').value;
       const description = document.getElementById('course-desc').value;
       if (!title) { alert('Enter title'); return; }
@@ -356,7 +418,7 @@ async function signUp() {
       loadSubjects(courseId, courseTitle);
     }
 
-async function addSubject(courseId, courseTitle) {
+    async function addSubject(courseId, courseTitle) {
       const title = document.getElementById('subj-title').value;
       const level_name = document.getElementById('subj-level').value || 'General Level';
       const teacher_id = document.getElementById('subj-teacher').value || null;
@@ -500,8 +562,7 @@ async function addSubject(courseId, courseTitle) {
 
       loadChapterData(chapterId, canManage);
     }
-
-    async function loadChapterData(chapterId, canManage) {
+async function loadChapterData(chapterId, canManage) {
       const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
       const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
       const { data: assignments } = await db.from('assignments').select('*').eq('chapter_id', chapterId);
@@ -680,8 +741,6 @@ async function addSubject(courseId, courseTitle) {
         target.innerText = `❌ Incorrect. The correct answer is Option ${correctOption}.`;
       }
     }
-
-    // UPGRADED DOUBTS PORTAL
     async function renderDoubtsTab() {
       const app = document.getElementById('app');
       const { data: subjects } = await db.from('subjects').select('id, title');
@@ -793,7 +852,7 @@ async function addSubject(courseId, courseTitle) {
       loadDoubtsQueue();
     }
 
-async function renderProfileTab() {
+    async function renderProfileTab() {
       const app = document.getElementById('app');
       app.innerHTML = `
         <div class="card">
