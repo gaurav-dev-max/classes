@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LMS Pro</title>
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-card: rgba(30, 41, 59, 0.85);
+      --accent: #6366f1;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border-light: rgba(255, 255, 255, 0.1);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+    body { background-color: var(--bg-main); color: var(--text-main); padding: 16px; min-height: 100vh; padding-bottom: 60px; }
+    header { font-size: 1.4rem; font-weight: 800; color: #818cf8; margin-bottom: 20px; text-align: center; display:flex; justify-content:space-between; align-items:center; }
+    .card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    h2, h3, h4 { margin-bottom: 10px; }
+    input, textarea, select { width: 100%; padding: 12px; margin-bottom: 10px; background: #0f172a; border: 1px solid var(--border-light); border-radius: 8px; color: #fff; font-size: 0.95rem; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    .btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 4px; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border-light); }
+    .status-msg { margin-top: 10px; font-size: 0.85rem; text-align: center; color: #f87171; }
+    .badge { font-size:0.75rem; background:rgba(99,102,241,0.2); color:#818cf8; padding:4px 8px; border-radius:12px; font-weight:bold; }
+    .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
+    .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .opt-label { display: block; background: rgba(15,23,42,0.6); border: 1px solid var(--border-light); padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+    .opt-label:has(input:checked) { border-color: var(--accent); background: rgba(99,102,241,0.2); }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header>
+    <span>⚡ LMS PRO</span>
+    <span id="role-badge" class="badge">GUEST</span>
+  </header>
+
+  <main id="app">
+    <div class="card" style="max-width:400px; margin: 0 auto;">
+      <h2>Welcome Back</h2>
+      <input type="email" id="email" placeholder="Email Address">
+      <input type="password" id="password" placeholder="Password">
+      <button class="btn" onclick="login()">Login</button>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="signUp()">Create Account</button>
+      <div id="status" class="status-msg"></div>
+    </div>
+  </main>
+
+  <script>
+    const SUPABASE_URL = 'https://hizlhtxaypzgnizmjnqm.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpemxodHhheXB6Z25pem1qbnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNTY5NzksImV4cCI6MjEwMDczMjk3OX0.HH9NaWUl5HSgzoy4w6W_57ylMRsIZS41LtGp7wM7V00';
+
+    let db;
+    let currentUser = null;
+    let userRole = 'student';
+
+    try {
+      db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      document.getElementById('status').innerText = 'Configuration Error';
+    }
+
+    async function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const status = document.getElementById('status');
+      if (!email || !password) { status.innerText = 'Please fill in both fields'; return; }
+      status.style.color = '#818cf8'; status.innerText = 'Logging in...';
+
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
+      if (error) { status.style.color = '#f87171'; status.innerText = error.message; }
+      else { currentUser = data.user; await fetchProfile(); renderDashboard(); }
+    }
+
+    async function signUp() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const status = document.getElementById('status');
+      if (!email || !password) { status.innerText = 'Please fill in both fields'; return; }
+      status.style.color = '#818cf8'; status.innerText = 'Creating account...';
+
+      const { data, error } = await db.auth.signUp({ email, password });
+      if (error) { status.style.color = '#f87171'; status.innerText = error.message; }
+      else { 
+        if (data.user) await db.from('profiles').insert([{ id: data.user.id, full_name: email.split('@')[0], role: 'student' }]);
+        status.style.color = '#4ade80'; status.innerText = 'Account created! Log in now.'; 
+      }
+    }
+
+    async function fetchProfile() {
+      if (!currentUser) return;
+      const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).single();
+      if (data) { userRole = data.role; document.getElementById('role-badge').innerText = userRole.toUpperCase(); }
+    }
+
+    function isStaff() { return userRole === 'admin' || userRole === 'teacher'; }
+
+    async function renderDashboard() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Welcome, ${currentUser.email.split('@')[0]}</h3>
+            <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:0.8rem;" onclick="location.reload()">Logout</button>
+          </div>
+        </div>
+
+        ${userRole === 'admin' ? `
+          <div class="card" style="border-color: #c084fc;">
+            <h3>👥 Add New User Account</h3>
+            <input type="text" id="new-user-name" placeholder="Full Name">
+            <input type="email" id="new-user-email" placeholder="Email Address">
+            <input type="password" id="new-user-pass" placeholder="Password">
+            <select id="new-user-role">
+              <option value="student">Role: Student</option>
+              <option value="teacher">Role: Teacher</option>
+              <option value="admin">Role: Admin</option>
+            </select>
+            <button class="btn" style="background:#a855f7;" onclick="adminCreateUser()">Create User</button>
+          </div>
+
+          <div class="card" style="border-color: var(--accent);">
+            <h3>➕ Create Main Course (e.g. Chartered Accountancy)</h3>
+            <input type="text" id="course-title" placeholder="Course Title">
+            <input type="text" id="course-desc" placeholder="Course Description">
+            <button class="btn" onclick="addNewCourse()">Publish Course</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin: 16px 0 10px 0;">Available Courses</h3>
+        <div id="course-list">Loading courses...</div>
+      `;
+
+      loadCourses();
+    }
+
+    async function adminCreateUser() {
+      const full_name = document.getElementById('new-user-name').value;
+      const email = document.getElementById('new-user-email').value;
+      const password = document.getElementById('new-user-pass').value;
+      const role = document.getElementById('new-user-role').value;
+      if (!full_name || !email || !password) { alert('Fill all fields'); return; }
+
+      const tempClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+      const { data, error } = await tempClient.auth.signUp({ email, password });
+      if (error) alert(error.message);
+      else if (data.user) {
+        await db.from('profiles').upsert([{ id: data.user.id, full_name: full_name, role: role }]);
+        alert(`Created ${role.toUpperCase()} account for ${email}`);
+      }
+    }
+
+    async function loadCourses() {
+      const list = document.getElementById('course-list');
+      const { data: courses } = await db.from('courses').select('*');
+      if (!courses || courses.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub); text-align:center;">No courses created yet.</p>`;
+        return;
+      }
+
+      list.innerHTML = courses.map(c => `
+        <div class="card">
+          <h4>${c.title}</h4>
+          <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:12px;">${c.description || ''}</p>
+          <button class="btn btn-secondary" onclick="openCourseLevels('${c.id}', '${c.title}')">Explore Course Levels & Subjects ➔</button>
+        </div>
+      `).join('');
+    }
+
+    async function addNewCourse() {
+      const title = document.getElementById('course-title').value;
+      const description = document.getElementById('course-desc').value;
+      if (!title) { alert('Enter title'); return; }
+      await db.from('courses').insert([{ title, description }]);
+      loadCourses();
+    }
+
+    // LEVEL AND SUBJECT MANAGEMENT
+    async function openCourseLevels(courseId, courseTitle) {
+      const app = document.getElementById('app');
+      const { data: teachers } = await db.from('profiles').select('id, full_name').eq('role', 'teacher');
+
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back to Courses</button>
+        <h2>${courseTitle}</h2>
+
+        ${userRole === 'admin' ? `
+          <div class="card" style="border-color: #38bdf8;">
+            <h4>➕ Add Subject & Assign Teacher</h4>
+            <input type="text" id="subj-title" placeholder="Subject Title (e.g. Accounting, Direct Tax)">
+            <input type="text" id="subj-level" placeholder="Level / Batch Name (e.g. Foundation, Inter, Final)">
+            <select id="subj-teacher">
+              <option value="">Select Assigned Teacher</option>
+              ${teachers ? teachers.map(t => `<option value="${t.id}">Teacher: ${t.full_name}</option>`).join('') : ''}
+            </select>
+            <button class="btn" style="background:#0284c7;" onclick="addSubject('${courseId}', '${courseTitle}')">Publish Subject</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">📚 Course Levels & Subjects</h3>
+        <div id="subjects-list">Loading subjects...</div>
+      `;
+
+      loadSubjects(courseId, courseTitle);
+    }
+
+    async function addSubject(courseId, courseTitle) {
+      const title = document.getElementById('subj-title').value;
+      const level_name = document.getElementById('subj-level').value || 'General Level';
+      const teacher_id = document.getElementById('subj-teacher').value || null;
+
+      if (!title) { alert('Enter subject title'); return; }
+
+      await db.from('subjects').insert([{ course_id: courseId, title, level_name, teacher_id }]);
+      alert('Subject published!');
+      openCourseLevels(courseId, courseTitle);
+    }
+
+    async function loadSubjects(courseId, courseTitle) {
+      const list = document.getElementById('subjects-list');
+      let query = db.from('subjects').select('*, profiles(full_name)').eq('course_id', courseId);
+
+      // If user is a teacher, show their assigned subjects or all subjects if admin/student
+      const { data: subjects } = await query;
+
+      if (!subjects || subjects.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No subjects added to this course yet.</p>`;
+        return;
+      }
+
+      list.innerHTML = subjects.map(s => `
+        <div class="card" style="border-color: rgba(99,102,241,0.3);">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h4>${s.title}</h4>
+            <span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${s.level_name}</span>
+          </div>
+          <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 12px 0;">
+            👨‍🏫 Teacher: <strong>${s.profiles ? s.profiles.full_name : 'Unassigned'}</strong>
+          </p>
+          <button class="btn" onclick="openSubjectPortal('${s.id}', '${s.title}', '${s.teacher_id}')">Open Subject Portal ➔</button>
+        </div>
+      `).join('');
+    }
+
+    async function openSubjectPortal(subjectId, subjectTitle, assignedTeacherId) {
+      const app = document.getElementById('app');
+      const canManage = (userRole === 'admin') || (userRole === 'teacher' && currentUser.id === assignedTeacherId);
+
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back</button>
+        <h2>📖 Subject: ${subjectTitle}</h2>
+
+        ${canManage ? `
+          <div class="card" style="border-color: var(--accent);">
+            <h4>🎥 Add Video Lecture</h4>
+            <input type="text" id="lec-title" placeholder="Lecture Title">
+            <input type="text" id="lec-url" placeholder="YouTube Video URL">
+            <button class="btn" onclick="addSubjectLecture('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Add Lecture</button>
+          </div>
+
+          <div class="card" style="border-color: var(--accent);">
+            <h4>📄 Add Study Material / PDF</h4>
+            <input type="text" id="mat-title" placeholder="Material Title">
+            <input type="text" id="mat-url" placeholder="Google Drive Link / PDF URL">
+            <button class="btn" onclick="addSubjectMaterial('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Add Material</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">🎥 Lectures</h3>
+        <div id="subject-lectures">Loading...</div>
+
+        <h3 style="margin-top:20px;">📄 Study Materials</h3>
+        <div id="subject-materials">Loading...</div>
+      `;
+
+      loadSubjectContent(subjectId);
+    }
+
+    async function loadSubjectContent(subjectId) {
+      const { data: lectures } = await db.from('lectures').select('*').eq('subject_id', subjectId);
+      const { data: materials } = await db.from('study_materials').select('*').eq('subject_id', subjectId);
+
+      const lecTarget = document.getElementById('subject-lectures');
+      lecTarget.innerHTML = (!lectures || lectures.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures uploaded for this subject yet.</p>`
+        : lectures.map(l => `
+          <div class="card">
+            <h4>${l.title}</h4>
+            <div class="video-wrapper"><iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe></div>
+          </div>
+        `).join('');
+
+      const matTarget = document.getElementById('subject-materials');
+      matTarget.innerHTML = (!materials || materials.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes uploaded for this subject yet.</p>`
+        : materials.map(m => `
+          <div class="card">
+            <h4>${m.title}</h4>
+            <a href="${m.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-top:8px;">Open Document 📄</a>
+          </div>
+        `).join('');
+    }
+
+    function formatEmbedUrl(url) {
+      if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
+      if (url.includes('youtu.be/')) return url.replace('youtu.be/', 'youtube.com/embed/');
+      return url;
+    }
+
+    async function addSubjectLecture(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('lec-title').value;
+      const video_url = document.getElementById('lec-url').value;
+      if (!title || !video_url) { alert('Fill all fields'); return; }
+      await db.from('lectures').insert([{ subject_id: subjectId, title, video_url }]);
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    async function addSubjectMaterial(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('mat-title').value;
+      const file_url = document.getElementById('mat-url').value;
+      if (!title || !file_url) { alert('Fill all fields'); return; }
+      await db.from('study_materials').insert([{ subject_id: subjectId, title, file_url }]);
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+  </script>
+</body>
+</html>
