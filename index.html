@@ -110,6 +110,10 @@
       }
     }
 
+    function isStaff() {
+      return userRole === 'admin' || userRole === 'teacher';
+    }
+
     async function renderDashboard() {
       const app = document.getElementById('app');
       app.innerHTML = `
@@ -121,8 +125,23 @@
         </div>
 
         ${userRole === 'admin' ? `
+          <div class="card" style="border-color: #c084fc;">
+            <h3>👥 Add New Teacher / Student Account</h3>
+            <input type="text" id="new-user-name" placeholder="Full Name">
+            <input type="email" id="new-user-email" placeholder="Email Address">
+            <input type="password" id="new-user-pass" placeholder="Password">
+            <select id="new-user-role">
+              <option value="student">Role: Student</option>
+              <option value="teacher">Role: Teacher</option>
+              <option value="admin">Role: Admin</option>
+            </select>
+            <button class="btn" style="background:#a855f7;" onclick="adminCreateUser()">Create Account</button>
+          </div>
+        ` : ''}
+
+        ${isStaff() ? `
           <div class="card" style="border-color: var(--accent);">
-            <h3>➕ Create New Course</h3>
+            <h3>➕ Create New Course (${userRole.toUpperCase()})</h3>
             <input type="text" id="course-title" placeholder="Course Title (e.g. Financial Accounting)">
             <input type="text" id="course-desc" placeholder="Course Description">
             <button class="btn" onclick="addNewCourse()">Publish Course</button>
@@ -134,6 +153,31 @@
       `;
 
       loadCourses();
+    }
+
+    async function adminCreateUser() {
+      const full_name = document.getElementById('new-user-name').value;
+      const email = document.getElementById('new-user-email').value;
+      const password = document.getElementById('new-user-pass').value;
+      const role = document.getElementById('new-user-role').value;
+
+      if (!full_name || !email || !password) {
+        alert('Please complete all fields for the new user.'); return;
+      }
+
+      // Create authentication user via secondary client so admin session isn't logged out
+      const tempClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+      const { data, error } = await tempClient.auth.signUp({ email, password });
+
+      if (error) {
+        alert('Error creating user: ' + error.message);
+      } else if (data.user) {
+        await db.from('profiles').upsert([{ id: data.user.id, full_name: full_name, role: role }]);
+        alert(`Successfully created ${role.toUpperCase()} account for ${email}!`);
+        document.getElementById('new-user-name').value = '';
+        document.getElementById('new-user-email').value = '';
+        document.getElementById('new-user-pass').value = '';
+      }
     }
 
     async function loadCourses() {
@@ -170,7 +214,7 @@
         <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back to Courses</button>
         <h2>${courseTitle}</h2>
 
-        ${userRole === 'admin' ? `
+        ${isStaff() ? `
           <div class="card" style="border-color: var(--accent);">
             <h4>🎥 Add Video Lecture</h4>
             <input type="text" id="lec-title" placeholder="Lecture Title">
@@ -236,7 +280,7 @@
         : tests.map(t => `
           <div class="card" style="border-color: rgba(56,189,248,0.3);">
             <h4>${t.title}</h4>
-            ${userRole === 'admin' ? `<button class="btn" style="background:#0284c7; margin-bottom:8px;" onclick="openQuestionBuilder('${t.id}', '${t.title}')">+ Add Questions</button>` : ''}
+            ${isStaff() ? `<button class="btn" style="background:#0284c7; margin-bottom:8px;" onclick="openQuestionBuilder('${t.id}', '${t.title}')">+ Add Questions</button>` : ''}
             <button class="btn" onclick="startTest('${t.id}', '${t.title}')">Start Test 📝</button>
           </div>
         `).join('');
