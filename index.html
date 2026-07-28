@@ -166,7 +166,7 @@
         <div class="card">
           <h4>${c.title}</h4>
           <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:12px;">${c.description || ''}</p>
-          <button class="btn btn-secondary" onclick="openCourseLevels('${c.id}', '${c.title}')">Explore Course Levels & Subjects ➔</button>
+          <button class="btn btn-secondary" onclick="openCourseLevels('${c.id}', '${c.title}')">Explore Subjects ➔</button>
         </div>
       `).join('');
     }
@@ -179,7 +179,7 @@
       loadCourses();
     }
 
-    // LEVEL AND SUBJECT MANAGEMENT
+    // SUBJECTS MANAGEMENT
     async function openCourseLevels(courseId, courseTitle) {
       const app = document.getElementById('app');
       const { data: teachers } = await db.from('profiles').select('id, full_name').eq('role', 'teacher');
@@ -192,7 +192,7 @@
           <div class="card" style="border-color: #38bdf8;">
             <h4>➕ Add Subject & Assign Teacher</h4>
             <input type="text" id="subj-title" placeholder="Subject Title (e.g. Accounting, Direct Tax)">
-            <input type="text" id="subj-level" placeholder="Level / Batch Name (e.g. Foundation, Inter, Final)">
+            <input type="text" id="subj-level" placeholder="Level / Batch Name (e.g. Foundation, Inter)">
             <select id="subj-teacher">
               <option value="">Select Assigned Teacher</option>
               ${teachers ? teachers.map(t => `<option value="${t.id}">Teacher: ${t.full_name}</option>`).join('') : ''}
@@ -201,7 +201,7 @@
           </div>
         ` : ''}
 
-        <h3 style="margin-top:20px;">📚 Course Levels & Subjects</h3>
+        <h3 style="margin-top:20px;">📚 Subjects</h3>
         <div id="subjects-list">Loading subjects...</div>
       `;
 
@@ -214,7 +214,6 @@
       const teacher_id = document.getElementById('subj-teacher').value || null;
 
       if (!title) { alert('Enter subject title'); return; }
-
       await db.from('subjects').insert([{ course_id: courseId, title, level_name, teacher_id }]);
       alert('Subject published!');
       openCourseLevels(courseId, courseTitle);
@@ -222,13 +221,10 @@
 
     async function loadSubjects(courseId, courseTitle) {
       const list = document.getElementById('subjects-list');
-      let query = db.from('subjects').select('*, profiles(full_name)').eq('course_id', courseId);
-
-      // If user is a teacher, show their assigned subjects or all subjects if admin/student
-      const { data: subjects } = await query;
+      const { data: subjects } = await db.from('subjects').select('*, profiles(full_name)').eq('course_id', courseId);
 
       if (!subjects || subjects.length === 0) {
-        list.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No subjects added to this course yet.</p>`;
+        list.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No subjects added yet.</p>`;
         return;
       }
 
@@ -241,11 +237,12 @@
           <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 12px 0;">
             👨‍🏫 Teacher: <strong>${s.profiles ? s.profiles.full_name : 'Unassigned'}</strong>
           </p>
-          <button class="btn" onclick="openSubjectPortal('${s.id}', '${s.title}', '${s.teacher_id}')">Open Subject Portal ➔</button>
+          <button class="btn" onclick="openSubjectPortal('${s.id}', '${s.title}', '${s.teacher_id}')">Open Chapters & Content ➔</button>
         </div>
       `).join('');
     }
 
+    // CHAPTER & CHAPTER CONTENT MANAGEMENT
     async function openSubjectPortal(subjectId, subjectTitle, assignedTeacherId) {
       const app = document.getElementById('app');
       const canManage = (userRole === 'admin') || (userRole === 'teacher' && currentUser.id === assignedTeacherId);
@@ -255,38 +252,123 @@
         <h2>📖 Subject: ${subjectTitle}</h2>
 
         ${canManage ? `
+          <div class="card" style="border-color: #c084fc;">
+            <h4>📌 Add New Chapter</h4>
+            <input type="text" id="chap-title" placeholder="Chapter Title (e.g. Chapter 1: Basic Concepts)">
+            <button class="btn" style="background:#a855f7;" onclick="addChapter('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Add Chapter</button>
+          </div>
+
+          <div class="card" style="border-color: #f59e0b;">
+            <h4>📝 Create Chapter Assignment</h4>
+            <input type="text" id="ass-title" placeholder="Assignment Title">
+            <textarea id="ass-desc" placeholder="Assignment Details / Questions"></textarea>
+            <input type="text" id="ass-url" placeholder="Resource PDF / Link (Optional)">
+            <button class="btn" style="background:#d97706;" onclick="addAssignment('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Assignment</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">📂 Chapters</h3>
+        <div id="chapters-list">Loading chapters...</div>
+
+        <h3 style="margin-top:20px;">📝 Assignments</h3>
+        <div id="assignments-list">Loading assignments...</div>
+      `;
+
+      loadChaptersAndAssignments(subjectId, canManage);
+    }
+
+    async function addChapter(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('chap-title').value;
+      if (!title) { alert('Enter chapter title'); return; }
+      await db.from('chapters').insert([{ subject_id: subjectId, title }]);
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    async function addAssignment(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('ass-title').value;
+      const description = document.getElementById('ass-desc').value;
+      const file_url = document.getElementById('ass-url').value;
+      if (!title) { alert('Enter assignment title'); return; }
+      await db.from('assignments').insert([{ subject_id: subjectId, title, description, file_url }]);
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    async function loadChaptersAndAssignments(subjectId, canManage) {
+      const { data: chapters } = await db.from('chapters').select('*').eq('subject_id', subjectId);
+      const { data: assignments } = await db.from('assignments').select('*').eq('subject_id', subjectId);
+
+      const chapTarget = document.getElementById('chapters-list');
+      chapTarget.innerHTML = (!chapters || chapters.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No chapters added yet.</p>`
+        : chapters.map(c => `
+          <div class="card" style="border-color:rgba(192,132,252,0.3);">
+            <h4>📌 ${c.title}</h4>
+            <button class="btn btn-secondary" onclick="openChapterContent('${c.id}', '${c.title}', ${canManage})">Open Chapter Content ➔</button>
+          </div>
+        `).join('');
+
+      const assTarget = document.getElementById('assignments-list');
+      assTarget.innerHTML = (!assignments || assignments.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No assignments posted yet.</p>`
+        : assignments.map(a => `
+          <div class="card" style="border-color:rgba(245,158,11,0.3);">
+            <h4>📝 ${a.title}</h4>
+            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:10px;">${a.description || ''}</p>
+            ${a.file_url ? `<a href="${a.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;">View Assignment Material 📄</a>` : ''}
+            
+            ${userRole === 'student' ? `
+              <div style="margin-top:10px;">
+                <input type="text" id="sub-url-${a.id}" placeholder="Paste Google Drive/PDF Link of solution">
+                <button class="btn" style="background:#d97706;" onclick="submitAssignment('${a.id}')">Submit Solution</button>
+              </div>
+            ` : ''}
+
+            ${canManage ? `
+              <button class="btn btn-secondary" style="margin-top:8px;" onclick="viewSubmissions('${a.id}', '${a.title}')">Review Submissions 📥</button>
+            ` : ''}
+          </div>
+        `).join('');
+    }
+
+    async function openChapterContent(chapterId, chapterTitle, canManage) {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back</button>
+        <h2>📌 ${chapterTitle}</h2>
+
+        ${canManage ? `
           <div class="card" style="border-color: var(--accent);">
             <h4>🎥 Add Video Lecture</h4>
             <input type="text" id="lec-title" placeholder="Lecture Title">
             <input type="text" id="lec-url" placeholder="YouTube Video URL">
-            <button class="btn" onclick="addSubjectLecture('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Add Lecture</button>
+            <button class="btn" onclick="addChapterLecture('${chapterId}', '${chapterTitle}', ${canManage})">Add Lecture</button>
           </div>
 
           <div class="card" style="border-color: var(--accent);">
-            <h4>📄 Add Study Material / PDF</h4>
+            <h4>📄 Add Chapter Notes / PDF</h4>
             <input type="text" id="mat-title" placeholder="Material Title">
             <input type="text" id="mat-url" placeholder="Google Drive Link / PDF URL">
-            <button class="btn" onclick="addSubjectMaterial('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Add Material</button>
+            <button class="btn" onclick="addChapterMaterial('${chapterId}', '${chapterTitle}', ${canManage})">Add Notes</button>
           </div>
         ` : ''}
 
         <h3 style="margin-top:20px;">🎥 Lectures</h3>
-        <div id="subject-lectures">Loading...</div>
+        <div id="chapter-lectures">Loading...</div>
 
-        <h3 style="margin-top:20px;">📄 Study Materials</h3>
-        <div id="subject-materials">Loading...</div>
+        <h3 style="margin-top:20px;">📄 Chapter Notes</h3>
+        <div id="chapter-materials">Loading...</div>
       `;
 
-      loadSubjectContent(subjectId);
+      loadChapterContent(chapterId);
     }
 
-    async function loadSubjectContent(subjectId) {
-      const { data: lectures } = await db.from('lectures').select('*').eq('subject_id', subjectId);
-      const { data: materials } = await db.from('study_materials').select('*').eq('subject_id', subjectId);
+    async function loadChapterContent(chapterId) {
+      const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
+      const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
 
-      const lecTarget = document.getElementById('subject-lectures');
+      const lecTarget = document.getElementById('chapter-lectures');
       lecTarget.innerHTML = (!lectures || lectures.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures uploaded for this subject yet.</p>`
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures in this chapter yet.</p>`
         : lectures.map(l => `
           <div class="card">
             <h4>${l.title}</h4>
@@ -294,9 +376,9 @@
           </div>
         `).join('');
 
-      const matTarget = document.getElementById('subject-materials');
+      const matTarget = document.getElementById('chapter-materials');
       matTarget.innerHTML = (!materials || materials.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes uploaded for this subject yet.</p>`
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes in this chapter yet.</p>`
         : materials.map(m => `
           <div class="card">
             <h4>${m.title}</h4>
@@ -305,27 +387,7 @@
         `).join('');
     }
 
-    function formatEmbedUrl(url) {
-      if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
-      if (url.includes('youtu.be/')) return url.replace('youtu.be/', 'youtube.com/embed/');
-      return url;
-    }
-
-    async function addSubjectLecture(subjectId, subjectTitle, assignedTeacherId) {
+    async function addChapterLecture(chapterId, chapterTitle, canManage) {
       const title = document.getElementById('lec-title').value;
       const video_url = document.getElementById('lec-url').value;
-      if (!title || !video_url) { alert('Fill all fields'); return; }
-      await db.from('lectures').insert([{ subject_id: subjectId, title, video_url }]);
-      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
-    }
-
-    async function addSubjectMaterial(subjectId, subjectTitle, assignedTeacherId) {
-      const title = document.getElementById('mat-title').value;
-      const file_url = document.getElementById('mat-url').value;
-      if (!title || !file_url) { alert('Fill all fields'); return; }
-      await db.from('study_materials').insert([{ subject_id: subjectId, title, file_url }]);
-      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
-    }
-  </script>
-</body>
-</html>
+     
