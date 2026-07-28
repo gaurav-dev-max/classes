@@ -25,6 +25,10 @@
     .btn-secondary { background: transparent; border: 1px solid var(--border-light); }
     .status-msg { margin-top: 10px; font-size: 0.85rem; text-align: center; color: #f87171; font-weight: bold; }
     .badge { font-size:0.75rem; background:rgba(99,102,241,0.2); color:#818cf8; padding:4px 8px; border-radius:12px; font-weight:bold; }
+    .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
+    .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .opt-label { display: block; background: rgba(15,23,42,0.6); border: 1px solid var(--border-light); padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+    .opt-label:has(input:checked) { border-color: var(--accent); background: rgba(99,102,241,0.2); }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -41,7 +45,7 @@
       <input type="email" id="email" placeholder="Email Address">
       <input type="password" id="password" placeholder="Password">
       <button class="btn" id="login-btn" onclick="login()">Login</button>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="signUp()">Create Account</button>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="signUp()">Create Student Account</button>
       <div id="status" class="status-msg"></div>
     </div>
   </main>
@@ -85,7 +89,15 @@
           btn.disabled = false;
         } else {
           currentUser = data.user;
-          await fetchProfile();
+          const hasProfile = await fetchProfile();
+          if (!hasProfile) {
+            status.style.color = '#f87171';
+            status.innerText = 'Account profile not found. Please contact Admin.';
+            await db.auth.signOut();
+            btn.innerText = 'Login';
+            btn.disabled = false;
+            return;
+          }
           renderDashboard();
         }
       } catch (err) {
@@ -106,7 +118,7 @@
       }
 
       status.style.color = '#818cf8';
-      status.innerText = 'Creating account...';
+      status.innerText = 'Creating student account...';
 
       try {
         const { data, error } = await db.auth.signUp({ email, password });
@@ -115,10 +127,10 @@
           status.innerText = error.message;
         } else {
           if (data.user) {
-            await db.from('profiles').insert([{ id: data.user.id, full_name: email.split('@')[0], role: 'student' }]);
+            await db.from('profiles').upsert([{ id: data.user.id, full_name: email.split('@')[0], role: 'student' }]);
           }
           status.style.color = '#4ade80';
-          status.innerText = 'Account created! Tap Login now.';
+          status.innerText = 'Account registered! Tap Login now.';
         }
       } catch (err) {
         alert('SignUp Error: ' + err.message);
@@ -126,18 +138,23 @@
     }
 
     async function fetchProfile() {
-      if (!currentUser) return;
+      if (!currentUser) return false;
       try {
         const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).maybeSingle();
         if (data && data.role) {
           userRole = data.role;
+          document.getElementById('role-badge').innerText = userRole.toUpperCase();
+          return true;
         } else {
-          userRole = 'admin';
+          // Default role assignment if profile missing
+          userRole = 'student';
+          document.getElementById('role-badge').innerText = 'STUDENT';
+          return true;
         }
       } catch (e) {
-        userRole = 'admin';
+        userRole = 'student';
+        return true;
       }
-      document.getElementById('role-badge').innerText = userRole.toUpperCase();
     }
 
     function isStaff() { return userRole === 'admin' || userRole === 'teacher'; }
@@ -167,7 +184,7 @@
           </div>
 
           <div class="card" style="border-color: var(--accent);">
-            <h3>➕ Create Main Course</h3>
+            <h3>➕ Create Main Course (e.g., CA Foundation)</h3>
             <input type="text" id="course-title" placeholder="Course Title">
             <input type="text" id="course-desc" placeholder="Course Description">
             <button class="btn" onclick="addNewCourse()">Publish Course</button>
@@ -209,7 +226,7 @@
         <div class="card">
           <h4>${c.title}</h4>
           <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:12px;">${c.description || ''}</p>
-          <button class="btn btn-secondary" onclick="openCourseLevels('${c.id}', '${c.title}')">Explore Course Portal ➔</button>
+          <button class="btn btn-secondary" onclick="openSubjectsList('${c.id}', '${c.title}')">Open Course Subjects ➔</button>
         </div>
       `).join('');
     }
@@ -222,15 +239,222 @@
       loadCourses();
     }
 
-    async function openCourseLevels(courseId, courseTitle) {
+    // SUBJECTS & CONTENT MANAGEMENT
+    async function openSubjectsList(courseId, courseTitle) {
       const app = document.getElementById('app');
+      const { data: teachers } = await db.from('profiles').select('id, full_name').eq('role', 'teacher');
+
       app.innerHTML = `
         <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back to Courses</button>
         <h2>${courseTitle}</h2>
-        <div class="card">
-          <p style="color:var(--text-sub);">Course portal active.</p>
-        </div>
+
+        ${userRole === 'admin' ? `
+          <div class="card" style="border-color: #38bdf8;">
+            <h4>➕ Add Subject & Assign Teacher</h4>
+            <input type="text" id="subj-title" placeholder="Subject Title (e.g. Accounting, Direct Tax)">
+            <input type="text" id="subj-level" placeholder="Level / Batch (e.g. Level 1, Inter)">
+            <select id="subj-teacher">
+              <option value="">Select Assigned Teacher</option>
+              ${teachers ? teachers.map(t => `<option value="${t.id}">Teacher: ${t.full_name}</option>`).join('') : ''}
+            </select>
+            <button class="btn" style="background:#0284c7;" onclick="addSubject('${courseId}', '${courseTitle}')">Publish Subject</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">📚 Course Subjects</h3>
+        <div id="subjects-list">Loading subjects...</div>
       `;
+
+      loadSubjects(courseId, courseTitle);
+    }
+
+    async function addSubject(courseId, courseTitle) {
+      const title = document.getElementById('subj-title').value;
+      const level_name = document.getElementById('subj-level').value || 'General Level';
+      const teacher_id = document.getElementById('subj-teacher').value || null;
+
+      if (!title) { alert('Enter subject title'); return; }
+      await db.from('subjects').insert([{ course_id: courseId, title, level_name, teacher_id }]);
+      alert('Subject published!');
+      openSubjectsList(courseId, courseTitle);
+    }
+
+    async function loadSubjects(courseId, courseTitle) {
+      const list = document.getElementById('subjects-list');
+      const { data: subjects } = await db.from('subjects').select('*, profiles(full_name)').eq('course_id', courseId);
+
+      if (!subjects || subjects.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No subjects added yet.</p>`;
+        return;
+      }
+
+      list.innerHTML = subjects.map(s => `
+        <div class="card" style="border-color: rgba(99,102,241,0.3);">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h4>${s.title}</h4>
+            <span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${s.level_name}</span>
+          </div>
+          <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 12px 0;">
+            👨‍🏫 Teacher: <strong>${s.profiles ? s.profiles.full_name : 'Unassigned'}</strong>
+          </p>
+          <button class="btn" onclick="openSubjectPortal('${s.id}', '${s.title}', '${s.teacher_id}')">Open Subject Hub (Lectures, Notes, Tests) ➔</button>
+        </div>
+      `).join('');
+    }
+
+    async function openSubjectPortal(subjectId, subjectTitle, assignedTeacherId) {
+      const app = document.getElementById('app');
+      const canManage = (userRole === 'admin') || (userRole === 'teacher' && currentUser.id === assignedTeacherId);
+
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back</button>
+        <h2>📖 ${subjectTitle}</h2>
+
+        ${canManage ? `
+          <div class="card" style="border-color: var(--accent);">
+            <h4>🎥 Add Video Lecture</h4>
+            <input type="text" id="lec-title" placeholder="Lecture Title">
+            <input type="text" id="lec-url" placeholder="YouTube Video URL">
+            <button class="btn" onclick="addSubjectLecture('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Lecture</button>
+          </div>
+
+          <div class="card" style="border-color: #38bdf8;">
+            <h4>📄 Add Study Material / PDF Notes</h4>
+            <input type="text" id="mat-title" placeholder="Material Title">
+            <input type="text" id="mat-url" placeholder="Google Drive Link / PDF URL">
+            <button class="btn" style="background:#0284c7;" onclick="addSubjectMaterial('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Notes</button>
+          </div>
+
+          <div class="card" style="border-color: #c084fc;">
+            <h4>🧪 Create Quiz / Online Test</h4>
+            <input type="text" id="test-title" placeholder="Test Title">
+            <input type="text" id="test-q" placeholder="Question">
+            <input type="text" id="opt-a" placeholder="Option A">
+            <input type="text" id="opt-b" placeholder="Option B">
+            <input type="text" id="opt-c" placeholder="Option C">
+            <input type="text" id="opt-d" placeholder="Option D">
+            <select id="correct-opt">
+              <option value="A">Correct Option: A</option>
+              <option value="B">Correct Option: B</option>
+              <option value="C">Correct Option: C</option>
+              <option value="D">Correct Option: D</option>
+            </select>
+            <button class="btn" style="background:#a855f7;" onclick="addSubjectTest('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Test</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">🎥 Video Lectures</h3>
+        <div id="subject-lectures">Loading...</div>
+
+        <h3 style="margin-top:20px;">📄 Notes & Study Materials</h3>
+        <div id="subject-materials">Loading...</div>
+
+        <h3 style="margin-top:20px;">🧪 Tests & Quizzes</h3>
+        <div id="subject-tests">Loading...</div>
+      `;
+
+      loadSubjectContent(subjectId);
+    }
+
+    async function loadSubjectContent(subjectId) {
+      const { data: lectures } = await db.from('lectures').select('*').eq('subject_id', subjectId);
+      const { data: materials } = await db.from('study_materials').select('*').eq('subject_id', subjectId);
+      const { data: tests } = await db.from('tests').select('*').eq('subject_id', subjectId);
+
+      // Render Lectures
+      const lecTarget = document.getElementById('subject-lectures');
+      lecTarget.innerHTML = (!lectures || lectures.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures uploaded yet.</p>`
+        : lectures.map(l => `
+          <div class="card">
+            <h4>${l.title}</h4>
+            <div class="video-wrapper"><iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe></div>
+          </div>
+        `).join('');
+
+      // Render Materials
+      const matTarget = document.getElementById('subject-materials');
+      matTarget.innerHTML = (!materials || materials.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No PDF notes uploaded yet.</p>`
+        : materials.map(m => `
+          <div class="card">
+            <h4>${m.title}</h4>
+            <a href="${m.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-top:8px;">View Document / Download 📄</a>
+          </div>
+        `).join('');
+
+      // Render Tests
+      const testTarget = document.getElementById('subject-tests');
+      testTarget.innerHTML = (!tests || tests.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No online tests created yet.</p>`
+        : tests.map(t => `
+          <div class="card" style="border-color:rgba(192,132,252,0.4);">
+            <h4>🧪 ${t.title}</h4>
+            <p style="margin:8px 0; font-size:0.95rem;"><strong>Q:</strong> ${t.question}</p>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="A"> A) ${t.option_a}</label>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="B"> B) ${t.option_b}</label>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="C"> C) ${t.option_c}</label>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="D"> D) ${t.option_d}</label>
+            <button class="btn" style="background:#a855f7;" onclick="submitQuiz('${t.id}', '${t.correct_option}')">Submit Answer</button>
+            <div id="quiz-res-${t.id}" style="margin-top:8px; font-weight:bold; text-align:center;"></div>
+          </div>
+        `).join('');
+    }
+
+    async function addSubjectLecture(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('lec-title').value;
+      const video_url = document.getElementById('lec-url').value;
+      if (!title || !video_url) { alert('Fill all fields'); return; }
+      await db.from('lectures').insert([{ subject_id: subjectId, title, video_url }]);
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    async function addSubjectMaterial(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('mat-title').value;
+      const file_url = document.getElementById('mat-url').value;
+      if (!title || !file_url) { alert('Fill all fields'); return; }
+      await db.from('study_materials').insert([{ subject_id: subjectId, title, file_url }]);
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    async function addSubjectTest(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('test-title').value;
+      const question = document.getElementById('test-q').value;
+      const option_a = document.getElementById('opt-a').value;
+      const option_b = document.getElementById('opt-b').value;
+      const option_c = document.getElementById('opt-c').value;
+      const option_d = document.getElementById('opt-d').value;
+      const correct_option = document.getElementById('correct-opt').value;
+
+      if (!title || !question || !option_a || !option_b) { alert('Fill required fields'); return; }
+
+      await db.from('tests').insert([{
+        subject_id: subjectId,
+        title, question, option_a, option_b, option_c, option_d, correct_option
+      }]);
+
+      alert('Quiz test published!');
+      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    function submitQuiz(testId, correctOption) {
+      const selected = document.querySelector(`input[name="test-${testId}"]:checked`);
+      const target = document.getElementById(`quiz-res-${testId}`);
+      if (!selected) { alert('Please select an option first.'); return; }
+
+      if (selected.value === correctOption) {
+        target.style.color = '#4ade80';
+        target.innerText = '✅ Correct Answer! Great job!';
+      } else {
+        target.style.color = '#f87171';
+        target.innerText = `❌ Incorrect. The correct answer is Option ${correctOption}.`;
+      }
+    }
+
+    function formatEmbedUrl(url) {
+      if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
+      if (url.includes('youtu.be/')) return url.replace('youtu.be/', 'youtube.com/embed/');
+      return url;
     }
   </script>
 </body>
