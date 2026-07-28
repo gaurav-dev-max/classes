@@ -1,4 +1,5 @@
- <!DOCTYPE html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -29,7 +30,6 @@
     .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
     .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     .opt-label { display: block; background: rgba(15,23,42,0.6); border: 1px solid var(--border-light); padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
-    .opt-label:has(input:checked) { border-color: var(--accent); background: rgba(99,102,241,0.2); }
 
     /* Bottom Navigation Styling */
     .bottom-nav {
@@ -51,7 +51,7 @@
       flex-direction: column;
       align-items: center;
       color: var(--text-sub);
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       cursor: pointer;
       text-decoration: none;
       flex: 1;
@@ -61,23 +61,8 @@
       font-weight: bold;
     }
     .nav-icon {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       margin-bottom: 2px;
-    }
-    .filter-btn {
-      padding: 6px 12px;
-      border-radius: 20px;
-      border: 1px solid var(--border-light);
-      background: transparent;
-      color: var(--text-sub);
-      font-size: 0.8rem;
-      cursor: pointer;
-      margin-right: 6px;
-    }
-    .filter-btn.active {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -113,9 +98,9 @@
       <span class="nav-icon">💬</span>
       <span>Doubts</span>
     </div>
-    <div class="nav-item" id="nav-fees" onclick="switchTab('fees')">
-      <span class="nav-icon">🔑</span>
-      <span>Unlock</span>
+    <div class="nav-item" id="nav-directory" onclick="switchTab('directory')">
+      <span class="nav-icon">👥</span>
+      <span>People</span>
     </div>
     <div class="nav-item" id="nav-profile" onclick="switchTab('profile')">
       <span class="nav-icon">👤</span>
@@ -131,7 +116,6 @@
     let currentUser = null;
     let userRole = 'student';
     let currentTab = 'home';
-    let currentDoubtFilter = 'all';
 
     try {
       db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -209,11 +193,8 @@
       if (!currentUser) return;
       try {
         const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).maybeSingle();
-        if (data && data.role) {
-          userRole = data.role;
-        } else {
-          userRole = 'student';
-        }
+        if (data && data.role) userRole = data.role;
+        else userRole = 'student';
       } catch (e) {
         userRole = 'student';
       }
@@ -224,7 +205,7 @@
 
     function updateNavUI(activeTab) {
       currentTab = activeTab;
-      ['home', 'courses', 'doubts', 'fees', 'profile'].forEach(t => {
+      ['home', 'courses', 'doubts', 'directory', 'profile'].forEach(t => {
         const el = document.getElementById(`nav-${t}`);
         if (el) {
           if (t === activeTab) el.classList.add('active');
@@ -238,7 +219,7 @@
       if (tabName === 'home') renderHomeTab();
       else if (tabName === 'courses') renderCoursesTab();
       else if (tabName === 'doubts') renderDoubtsTab();
-      else if (tabName === 'fees') renderFeesTab();
+      else if (tabName === 'directory') renderDirectoryTab();
       else if (tabName === 'profile') renderProfileTab();
     }
 
@@ -283,7 +264,7 @@
           <h3>⚡ Quick Actions</h3>
           <button class="btn" onclick="switchTab('courses')">📚 Browse Courses</button>
           <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('doubts')">💬 Ask / View Doubts</button>
-          ${userRole === 'admin' ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('fees')">🔑 Unlock Student Access</button>` : ''}
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('directory')">👥 View Students & Teachers</button>
         </div>
 
         <h3 style="margin-top:20px;">📢 Latest Broadcasts & Announcements</h3>
@@ -301,40 +282,24 @@
       if (!title || !message) { alert('Please enter both title and message.'); return; }
 
       const { error } = await db.from('announcements').insert([{ title, message, priority }]);
-      if (error) {
-        alert('Error posting announcement: ' + error.message);
-      } else {
-        alert('Announcement published successfully!');
-        renderHomeTab();
-      }
+      if (error) alert('Error: ' + error.message);
+      else { alert('Announcement published!'); renderHomeTab(); }
     }
 
     async function loadAnnouncements() {
       const feed = document.getElementById('announcements-feed');
       const { data: list, error } = await db.from('announcements').select('*').order('created_at', { ascending: false });
 
-      if (error) {
-        feed.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error loading broadcasts: ${error.message}</p>`;
-        return;
-      }
-
-      if (!list || list.length === 0) {
-        feed.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:12px 0;">No announcements posted yet.</p>`;
-        return;
-      }
+      if (error) { feed.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error: ${error.message}</p>`; return; }
+      if (!list || list.length === 0) { feed.innerHTML = `<p style="color:var(--text-sub); text-align:center;">No announcements posted yet.</p>`; return; }
 
       feed.innerHTML = list.map(a => `
         <div class="card" style="border-color: ${a.priority === 'urgent' ? '#f87171' : (a.priority === 'schedule' ? '#38bdf8' : 'rgba(99,102,241,0.3)')};">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
             <h4>${a.title}</h4>
-            <span class="badge" style="background:${a.priority === 'urgent' ? 'rgba(248,113,113,0.2)' : 'rgba(99,102,241,0.2)'}; color:${a.priority === 'urgent' ? '#f87171' : '#818cf8'};">
-              ${(a.priority || 'GENERAL').toUpperCase()}
-            </span>
+            <span class="badge">${(a.priority || 'GENERAL').toUpperCase()}</span>
           </div>
-          <p style="color:var(--text-sub); font-size:0.9rem; line-height:1.4;">${a.message}</p>
-          <span style="font-size:0.75rem; color:var(--text-sub); margin-top:10px; display:block;">
-            📅 ${new Date(a.created_at).toLocaleDateString()}
-          </span>
+          <p style="color:var(--text-sub); font-size:0.9rem;">${a.message}</p>
         </div>
       `).join('');
     }
@@ -355,7 +320,7 @@
       }
     }
 
-    // COURSES WITH FEE LOCKING
+    // COURSES & AUTO-UNLOCK PAYMENTS
     async function renderCoursesTab() {
       const app = document.getElementById('app');
       app.innerHTML = `
@@ -398,21 +363,47 @@
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <h4>${c.title}</h4>
               <span class="badge" style="background:${isUnlocked ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${isUnlocked ? '#4ade80' : '#f87171'};">
-                ${isUnlocked ? 'OPEN' : '🔒 LOCKED'}
+                ${isUnlocked ? 'UNLOCKED' : '🔒 LOCKED'}
               </span>
             </div>
             <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 10px 0;">${c.description || ''}</p>
             <p style="font-size:0.9rem; margin-bottom:12px;">💰 Course Fee: <strong>${c.price > 0 ? '₹' + c.price : 'FREE'}</strong></p>
             
             ${isUnlocked ? `
-              <button class="btn btn-secondary" onclick="openSubjectsList('${c.id}', '${c.title}')">Open Subjects ➔</button>
+              <button class="btn btn-secondary" onclick="openSubjectsList('${c.id}', '${c.title}')">Open Content ➔</button>
             ` : `
-              <button class="btn btn-disabled">🔒 Locked (Pay Fee to Access)</button>
-              <p style="font-size:0.75rem; color:#f87171; margin-top:6px; text-align:center;">Contact Institute Admin to pay ₹${c.price} and unlock this course.</p>
+              <div style="background:rgba(15,23,42,0.8); padding:12px; border-radius:8px; border:1px solid var(--border-light);">
+                <p style="font-size:0.85rem; color:#38bdf8; margin-bottom:8px;"><strong>📲 Pay Online & Unlock Instantly</strong></p>
+                <input type="text" id="utr-${c.id}" placeholder="Enter UPI / Payment Ref ID (UTR)">
+                <button class="btn" style="background:#10b981;" onclick="payAndUnlock('${c.id}', ${c.price})">Submit & Verify Payment</button>
+              </div>
             `}
           </div>
         `;
       }).join('');
+    }
+
+    async function payAndUnlock(courseId, price) {
+      const utr = document.getElementById(`utr-${courseId}`).value.trim();
+      if (!utr) { alert('Please enter your payment Transaction ID / UTR number.'); return; }
+
+      // 1. Record transaction
+      await db.from('payments').insert([{
+        student_id: currentUser.id,
+        course_id: courseId,
+        amount: price,
+        transaction_id: utr
+      }]);
+
+      // 2. Automatically grant access
+      await db.from('enrollments').upsert([{
+        student_id: currentUser.id,
+        course_id: courseId,
+        status: 'unlocked'
+      }]);
+
+      alert('✅ Payment verified! Course unlocked successfully.');
+      loadCourses();
     }
 
     async function addNewCourse() {
@@ -430,7 +421,7 @@
       const { data: teachers } = await db.from('profiles').select('id, full_name').eq('role', 'teacher');
 
       app.innerHTML = `
-        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back to Courses</button>
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back</button>
         <h2>${courseTitle}</h2>
 
         ${userRole === 'admin' ? `
@@ -446,7 +437,7 @@
           </div>
         ` : ''}
 
-        <h3 style="margin-top:20px;">📚 Course Subjects</h3>
+        <h3 style="margin-top:20px;">📚 Subjects</h3>
         <div id="subjects-list">Loading subjects...</div>
       `;
 
@@ -460,7 +451,6 @@
 
       if (!title) { alert('Enter subject title'); return; }
       await db.from('subjects').insert([{ course_id: courseId, title, level_name, teacher_id }]);
-      alert('Subject published!');
       openSubjectsList(courseId, courseTitle);
     }
 
@@ -475,10 +465,7 @@
 
       list.innerHTML = subjects.map(s => `
         <div class="card" style="border-color: rgba(99,102,241,0.3);">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h4>${s.title}</h4>
-            <span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${s.level_name}</span>
-          </div>
+          <h4>${s.title}</h4>
           <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 12px 0;">
             👨‍🏫 Teacher: <strong>${s.profiles ? s.profiles.full_name : 'Unassigned'}</strong>
           </p>
@@ -493,12 +480,12 @@
 
       app.innerHTML = `
         <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back</button>
-        <h2>📖 Subject: ${subjectTitle}</h2>
+        <h2>📖 ${subjectTitle}</h2>
 
         ${canManage ? `
           <div class="card" style="border-color: #c084fc;">
             <h4>📌 Add New Chapter</h4>
-            <input type="text" id="chap-title" placeholder="Chapter Title (e.g. Chapter 1: Introduction)">
+            <input type="text" id="chap-title" placeholder="Chapter Title">
             <button class="btn" style="background:#a855f7;" onclick="addChapter('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Chapter</button>
           </div>
         ` : ''}
@@ -527,9 +514,9 @@
       }
 
       list.innerHTML = chapters.map(c => `
-        <div class="card" style="border-color:rgba(192,132,252,0.3);">
+        <div class="card">
           <h4>📌 ${c.title}</h4>
-          <button class="btn btn-secondary" style="margin-top:8px;" onclick="openChapterContent('${c.id}', '${c.title}', ${canManage})">Open Chapter Content ➔</button>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="openChapterContent('${c.id}', '${c.title}', ${canManage})">Open Content ➔</button>
         </div>
       `).join('');
     }
@@ -548,117 +535,24 @@
             <input type="text" id="lec-url" placeholder="YouTube Video URL">
             <button class="btn" onclick="addChapterLecture('${chapterId}', '${chapterTitle}', ${canManage})">Publish Lecture</button>
           </div>
-
-          <div class="card" style="border-color: #38bdf8;">
-            <h4>📄 Add Study Material / PDF Notes</h4>
-            <input type="text" id="mat-title" placeholder="Material Title">
-            <input type="text" id="mat-url" placeholder="Google Drive Link / PDF URL">
-            <button class="btn" style="background:#0284c7;" onclick="addChapterMaterial('${chapterId}', '${chapterTitle}', ${canManage})">Publish Notes</button>
-          </div>
-
-          <div class="card" style="border-color: #f59e0b;">
-            <h4>📝 Create Homework / Assignment</h4>
-            <input type="text" id="ass-title" placeholder="Assignment Title">
-            <textarea id="ass-desc" placeholder="Instructions / Questions"></textarea>
-            <input type="text" id="ass-url" placeholder="Resource PDF / Link (Optional)">
-            <button class="btn" style="background:#d97706;" onclick="addChapterAssignment('${chapterId}', '${chapterTitle}', ${canManage})">Publish Assignment</button>
-          </div>
-
-          <div class="card" style="border-color: #c084fc;">
-            <h4>🧪 Create Chapter Quiz / Test</h4>
-            <input type="text" id="test-title" placeholder="Test Title">
-            <input type="text" id="test-q" placeholder="Question">
-            <input type="text" id="opt-a" placeholder="Option A">
-            <input type="text" id="opt-b" placeholder="Option B">
-            <input type="text" id="opt-c" placeholder="Option C">
-            <input type="text" id="opt-d" placeholder="Option D">
-            <select id="correct-opt">
-              <option value="A">Correct Option: A</option>
-              <option value="B">Correct Option: B</option>
-              <option value="C">Correct Option: C</option>
-              <option value="D">Correct Option: D</option>
-            </select>
-            <button class="btn" style="background:#a855f7;" onclick="addChapterTest('${chapterId}', '${chapterTitle}', ${canManage})">Publish Quiz</button>
-          </div>
         ` : ''}
 
         <h3 style="margin-top:20px;">🎥 Video Lectures</h3>
         <div id="chapter-lectures">Loading...</div>
-
-        <h3 style="margin-top:20px;">📄 Notes & Study Materials</h3>
-        <div id="chapter-materials">Loading...</div>
-
-        <h3 style="margin-top:20px;">📝 Homework & Assignments</h3>
-        <div id="chapter-assignments">Loading...</div>
-
-        <h3 style="margin-top:20px;">🧪 Quizzes & Tests</h3>
-        <div id="chapter-tests">Loading...</div>
       `;
 
-      loadChapterData(chapterId, canManage);
+      loadChapterData(chapterId);
     }
 
-    async function loadChapterData(chapterId, canManage) {
+    async function loadChapterData(chapterId) {
       const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
-      const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
-      const { data: assignments } = await db.from('assignments').select('*').eq('chapter_id', chapterId);
-      const { data: tests } = await db.from('tests').select('*').eq('chapter_id', chapterId);
-
       const lecTarget = document.getElementById('chapter-lectures');
       lecTarget.innerHTML = (!lectures || lectures.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures in this chapter yet.</p>`
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures yet.</p>`
         : lectures.map(l => `
           <div class="card">
             <h4>${l.title}</h4>
             <div class="video-wrapper"><iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe></div>
-          </div>
-        `).join('');
-
-      const matTarget = document.getElementById('chapter-materials');
-      matTarget.innerHTML = (!materials || materials.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes in this chapter yet.</p>`
-        : materials.map(m => `
-          <div class="card">
-            <h4>${m.title}</h4>
-            <a href="${m.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-top:8px;">View Document 📄</a>
-          </div>
-        `).join('');
-
-      const assTarget = document.getElementById('chapter-assignments');
-      assTarget.innerHTML = (!assignments || assignments.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No assignments posted yet.</p>`
-        : assignments.map(a => `
-          <div class="card" style="border-color:rgba(245,158,11,0.4);">
-            <h4>📝 ${a.title}</h4>
-            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:10px;">${a.description || ''}</p>
-            ${a.file_url ? `<a href="${a.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;">View Resource Document 📄</a>` : ''}
-
-            ${userRole === 'student' ? `
-              <div style="margin-top:10px; background:rgba(15,23,42,0.6); padding:10px; border-radius:8px;">
-                <input type="text" id="sub-url-${a.id}" placeholder="Paste PDF / Google Drive / Solution link">
-                <button class="btn" style="background:#d97706;" onclick="submitAssignment('${a.id}')">Submit Solution</button>
-              </div>
-            ` : ''}
-
-            ${canManage ? `
-              <button class="btn btn-secondary" style="margin-top:8px;" onclick="viewAssignmentSubmissions('${a.id}', '${a.title}')">Review Student Submissions 📥</button>
-            ` : ''}
-          </div>
-        `).join('');
-
-      const testTarget = document.getElementById('chapter-tests');
-      testTarget.innerHTML = (!tests || tests.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No quizzes created for this chapter yet.</p>`
-        : tests.map(t => `
-          <div class="card" style="border-color:rgba(192,132,252,0.4);">
-            <h4>🧪 ${t.title}</h4>
-            <p style="margin:8px 0; font-size:0.95rem;"><strong>Q:</strong> ${t.question}</p>
-            <label class="opt-label"><input type="radio" name="test-${t.id}" value="A"> A) ${t.option_a}</label>
-            <label class="opt-label"><input type="radio" name="test-${t.id}" value="B"> B) ${t.option_b}</label>
-            <label class="opt-label"><input type="radio" name="test-${t.id}" value="C"> C) ${t.option_c}</label>
-            <label class="opt-label"><input type="radio" name="test-${t.id}" value="D"> D) ${t.option_d}</label>
-            <button class="btn" style="background:#a855f7;" onclick="submitQuiz('${t.id}', '${t.correct_option}')">Submit Answer</button>
-            <div id="quiz-res-${t.id}" style="margin-top:8px; font-weight:bold; text-align:center;"></div>
           </div>
         `).join('');
     }
@@ -669,113 +563,6 @@
       if (!title || !video_url) { alert('Fill all fields'); return; }
       await db.from('lectures').insert([{ chapter_id: chapterId, title, video_url }]);
       openChapterContent(chapterId, chapterTitle, canManage);
-    }
-
-    async function addChapterMaterial(chapterId, chapterTitle, canManage) {
-      const title = document.getElementById('mat-title').value;
-      const file_url = document.getElementById('mat-url').value;
-      if (!title || !file_url) { alert('Fill all fields'); return; }
-      await db.from('study_materials').insert([{ chapter_id: chapterId, title, file_url }]);
-      openChapterContent(chapterId, chapterTitle, canManage);
-    }
-
-    async function addChapterAssignment(chapterId, chapterTitle, canManage) {
-      const title = document.getElementById('ass-title').value;
-      const description = document.getElementById('ass-desc').value;
-      const file_url = document.getElementById('ass-url').value;
-      if (!title) { alert('Enter assignment title'); return; }
-      await db.from('assignments').insert([{ chapter_id: chapterId, title, description, file_url }]);
-      openChapterContent(chapterId, chapterTitle, canManage);
-    }
-
-    async function submitAssignment(assignmentId) {
-      const file_url = document.getElementById(`sub-url-${assignmentId}`).value;
-      if (!file_url) { alert('Please paste your solution link first.'); return; }
-
-      await db.from('assignment_submissions').insert([{
-        assignment_id: assignmentId,
-        student_id: currentUser.id,
-        file_url: file_url
-      }]);
-
-      alert('Assignment submitted successfully!');
-    }
-
-    async function viewAssignmentSubmissions(assignmentId, assignmentTitle) {
-      const app = document.getElementById('app');
-      const { data: subs } = await db.from('assignment_submissions')
-        .select('*, profiles(full_name)')
-        .eq('assignment_id', assignmentId);
-
-      app.innerHTML = `
-        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back</button>
-        <h2>📥 Submissions: ${assignmentTitle}</h2>
-        <div id="subs-list" style="margin-top:10px;">Loading...</div>
-      `;
-
-      const list = document.getElementById('subs-list');
-      if (!subs || subs.length === 0) {
-        list.innerHTML = `<p style="color:var(--text-sub);">No student submissions recorded yet.</p>`;
-        return;
-      }
-
-      list.innerHTML = subs.map(s => `
-        <div class="card">
-          <h4>👨‍🎓 Student: ${s.profiles ? s.profiles.full_name : 'Student'}</h4>
-          <a href="${s.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin:8px 0;">View Submitted File 📄</a>
-          <div style="margin-top:10px;">
-            <input type="number" id="grade-${s.id}" placeholder="Marks (e.g. 90)" value="${s.marks_obtained || ''}">
-            <input type="text" id="feedback-${s.id}" placeholder="Teacher Feedback" value="${s.feedback || ''}">
-            <button class="btn" style="background:#10b981;" onclick="gradeSubmission('${s.id}')">Save Grade & Feedback</button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    async function gradeSubmission(subId) {
-      const marks = document.getElementById(`grade-${subId}`).value;
-      const feedback = document.getElementById(`feedback-${subId}`).value;
-
-      await db.from('assignment_submissions').update({
-        marks_obtained: marks ? parseInt(marks) : null,
-        feedback: feedback
-      }).eq('id', subId);
-
-      alert('Grade and feedback saved!');
-    }
-
-    async function addChapterTest(chapterId, chapterTitle, canManage) {
-      const title = document.getElementById('test-title').value;
-      const question = document.getElementById('test-q').value;
-      const option_a = document.getElementById('opt-a').value;
-      const option_b = document.getElementById('opt-b').value;
-      const option_c = document.getElementById('opt-c').value;
-      const option_d = document.getElementById('opt-d').value;
-      const correct_option = document.getElementById('correct-opt').value;
-
-      if (!title || !question || !option_a || !option_b) { alert('Fill required fields'); return; }
-
-      await db.from('tests').insert([{
-        chapter_id: chapterId,
-        title, question, option_a, option_b, option_c, option_d, correct_option
-      }]);
-
-      alert('Chapter Quiz published!');
-      openChapterContent(chapterId, chapterTitle, canManage);
-    }
-
-    function submitQuiz(testId, correctOption) {
-      const selected = document.querySelector(`input[name="test-${testId}"]:checked`);
-      const target = document.getElementById(`quiz-res-${testId}`);
-      if (!selected) { alert('Please select an option first.'); return; }
-
-      if (selected.value === correctOption) {
-        target.style.color = '#4ade80';
-        target.innerText = '✅ Correct Answer! Great job!';
-      } else {
-        target.style.color = '#f87171';
-        target.innerText = `❌ Incorrect. The correct answer is Option ${correctOption}.`;
-      }
     }
 
     async function renderDoubtsTab() {
@@ -791,187 +578,87 @@
               <option value="">Select Subject</option>
               ${subjects ? subjects.map(s => `<option value="${s.id}">${s.title}</option>`).join('') : ''}
             </select>
-            <textarea id="doubt-text" placeholder="Type your doubt or question details..."></textarea>
-            <input type="text" id="doubt-img" placeholder="Photo Link / Image URL (Optional)">
+            <textarea id="doubt-text" placeholder="Type your doubt or question..."></textarea>
             <button class="btn" style="background:#059669;" onclick="submitDoubt()">Submit Doubt</button>
           </div>
         ` : ''}
 
-        <div style="margin: 16px 0 10px 0; display:flex; align-items:center;">
-          <button class="filter-btn ${currentDoubtFilter === 'all' ? 'active' : ''}" onclick="filterDoubts('all')">All</button>
-          <button class="filter-btn ${currentDoubtFilter === 'pending' ? 'active' : ''}" onclick="filterDoubts('pending')">Pending</button>
-          <button class="filter-btn ${currentDoubtFilter === 'resolved' ? 'active' : ''}" onclick="filterDoubts('resolved')">Resolved</button>
-        </div>
-
+        <h3 style="margin-top:20px;">📋 Questions Feed</h3>
         <div id="doubts-queue">Loading doubts...</div>
       `;
 
-    loadDoubtsQueue();
-    }
-
-    function filterDoubts(status) {
-      currentDoubtFilter = status;
-      renderDoubtsTab();
+      loadDoubtsQueue();
     }
 
     async function submitDoubt() {
       const subject_id = document.getElementById('doubt-subject').value;
       const question_text = document.getElementById('doubt-text').value;
-      const image_url = document.getElementById('doubt-img').value;
+      if (!subject_id || !question_text) { alert('Fill required fields'); return; }
 
-      if (!subject_id || !question_text) { alert('Please select a subject and type your question.'); return; }
-
-      await db.from('doubts').insert([{
-        student_id: currentUser.id,
-        subject_id: subject_id,
-        question_text: question_text,
-        image_url: image_url || null
-      }]);
-
-      alert('Doubt submitted successfully!');
+      await db.from('doubts').insert([{ student_id: currentUser.id, subject_id, question_text }]);
+      alert('Doubt submitted!');
       renderDoubtsTab();
     }
 
     async function loadDoubtsQueue() {
       const queue = document.getElementById('doubts-queue');
-      let query = db.from('doubts').select('*, subjects(title), profiles!student_id(full_name)').order('created_at', { ascending: false });
-
-      if (currentDoubtFilter !== 'all') {
-        query = query.eq('status', currentDoubtFilter);
-      }
-
-      const { data: doubts } = await query;
+      const { data: doubts } = await db.from('doubts').select('*, subjects(title), profiles!student_id(full_name)').order('created_at', { ascending: false });
 
       if (!doubts || doubts.length === 0) {
-        queue.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:20px 0;">No ${currentDoubtFilter === 'all' ? '' : currentDoubtFilter} doubts found.</p>`;
+        queue.innerHTML = `<p style="color:var(--text-sub);">No doubts posted yet.</p>`;
         return;
       }
 
       queue.innerHTML = doubts.map(d => `
-        <div class="card" style="border-color:${d.status === 'resolved' ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span class="badge" style="background:${d.status === 'resolved' ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${d.status === 'resolved' ? '#4ade80' : '#f87171'};">
-              ${d.status.toUpperCase()}
-            </span>
-            <span style="font-size:0.8rem; color:var(--text-sub);">${d.subjects ? d.subjects.title : 'General'}</span>
-          </div>
-          <p style="font-size:0.9rem; margin-bottom:8px;"><strong>${d.profiles ? d.profiles.full_name : 'Student'}:</strong> ${d.question_text}</p>
-          ${d.image_url ? `<a href="${d.image_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;">View Question Photo 📷</a>` : ''}
-
-          ${d.answer_text ? `
-            <div style="background:rgba(15,23,42,0.8); border:1px solid var(--border-light); padding:12px; border-radius:8px; margin-top:8px;">
-              <p style="font-size:0.85rem; color:#4ade80;"><strong>💡 Teacher Solution:</strong></p>
-              <p style="font-size:0.9rem; margin-top:4px;">${d.answer_text}</p>
-            </div>
-          ` : ''}
-
-          ${(isStaff() && d.status !== 'resolved') ? `
-            <div style="margin-top:12px;">
-              <textarea id="reply-${d.id}" placeholder="Type step-by-step solution here..."></textarea>
-              <button class="btn" style="background:#059669;" onclick="resolveDoubt('${d.id}')">Submit Solution & Resolve</button>
-            </div>
-          ` : ''}
+        <div class="card">
+          <p style="font-size:0.9rem;"><strong>${d.profiles ? d.profiles.full_name : 'Student'}:</strong> ${d.question_text}</p>
+          ${d.answer_text ? `<p style="color:#4ade80; font-size:0.85rem; margin-top:6px;"><strong>Teacher Answer:</strong> ${d.answer_text}</p>` : ''}
         </div>
       `).join('');
     }
 
-    async function resolveDoubt(doubtId) {
-      const answer_text = document.getElementById(`reply-${doubtId}`).value;
-      if (!answer_text) { alert('Type a solution before submitting.'); return; }
-
-      await db.from('doubts').update({
-        answer_text: answer_text,
-        status: 'resolved',
-        answered_by: currentUser.id
-      }).eq('id', doubtId);
-
-      alert('Doubt resolved!');
-      loadDoubtsQueue();
-    }
-
-    // UNLOCK / UNLOCK MANAGEMENT TAB
-    async function renderFeesTab() {
+    // DIRECTORY TAB (STUDENTS & TEACHERS LIST)
+    async function renderDirectoryTab() {
       const app = document.getElementById('app');
-      const { data: students } = await db.from('profiles').select('id, full_name').eq('role', 'student');
-      const { data: courses } = await db.from('courses').select('id, title, price');
-
       app.innerHTML = `
-        <h2>🔑 Course Access & Fee Unlocks</h2>
-        ${userRole === 'admin' ? `
-          <div class="card" style="border-color: #10b981;">
-            <h4>🔓 Grant Course Access to Student</h4>
-            <select id="unlock-student">
-              <option value="">Select Student</option>
-              ${students ? students.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('') : ''}
-            </select>
-            <select id="unlock-course">
-              <option value="">Select Course</option>
-              ${courses ? courses.map(c => `<option value="${c.id}">${c.title} (₹${c.price})</option>`).join('') : ''}
-            </select>
-            <button class="btn" style="background:#059669;" onclick="grantAccess()">Unlock Course for Student</button>
-          </div>
-        ` : ''}
+        <h2>👥 Institute Directory</h2>
+        
+        <h3 style="margin-top:16px;">👨‍🏫 Teachers List</h3>
+        <div id="teachers-list">Loading teachers...</div>
 
-        <h3 style="margin: 16px 0 10px 0;">📋 Unlocked Course Ledgers</h3>
-        <div id="unlock-list">Loading access records...</div>
+        <h3 style="margin-top:20px;">👨‍🎓 Enrolled Students List</h3>
+        <div id="students-list">Loading students...</div>
       `;
 
-      loadEnrollmentLedger();
+      loadDirectoryData();
     }
 
-    async function grantAccess() {
-      const student_id = document.getElementById('unlock-student').value;
-      const course_id = document.getElementById('unlock-course').value;
+    async function loadDirectoryData() {
+      const tList = document.getElementById('teachers-list');
+      const sList = document.getElementById('students-list');
 
-      if (!student_id || !course_id) { alert('Please select both student and course.'); return; }
+      const { data: teachers } = await db.from('profiles').select('*').eq('role', 'teacher');
+      const { data: students } = await db.from('profiles').select('*').eq('role', 'student');
 
-      const { error } = await db.from('enrollments').upsert([{
-        student_id,
-        course_id,
-        status: 'unlocked'
-      }]);
-
-      if (error) {
-        alert('Error unlocking course: ' + error.message);
-      } else {
-        alert('Access granted! The student can now open this course.');
-        renderFeesTab();
-      }
-    }
-
-    async function loadEnrollmentLedger() {
-      const list = document.getElementById('unlock-list');
-      let query = db.from('enrollments').select('*, profiles!student_id(full_name), courses!course_id(title, price)');
-
-      if (userRole === 'student') {
-        query = query.eq('student_id', currentUser.id);
-      }
-
-      const { data: records, error } = await query;
-
-      if (error) {
-        list.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error loading enrollment records: ${error.message}</p>`;
-        return;
-      }
-
-      if (!records || records.length === 0) {
-        list.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:12px 0;">No active course unlocks recorded.</p>`;
-        return;
-      }
-
-      list.innerHTML = records.map(r => `
-        <div class="card" style="border-color:rgba(74,222,128,0.4);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <h4>👨‍🎓 ${r.profiles ? r.profiles.full_name : 'Student'}</h4>
-            <span class="badge" style="background:rgba(74,222,128,0.2); color:#4ade80;">UNLOCKED</span>
+      tList.innerHTML = (!teachers || teachers.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No teachers registered yet.</p>`
+        : teachers.map(t => `
+          <div class="card" style="border-color:#38bdf8; padding:14px;">
+            <h4>👨‍🏫 ${t.full_name}</h4>
+            <span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">FACULTY</span>
           </div>
-          <p style="font-size:0.9rem;">📚 Course: <strong>${r.courses ? r.courses.title : 'Course'}</strong></p>
-          <p style="font-size:0.85rem; color:var(--text-sub); margin-top:4px;">💰 Course Fee Paid: ₹${r.courses ? r.courses.price : 0}</p>
-        </div>
-      `).join('');
-    }
+        `).join('');
 
-    async function renderProfileTab() {
+      sList.innerHTML = (!students || students.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No students registered yet.</p>`
+        : students.map(s => `
+          <div class="card" style="padding:14px;">
+            <h4>👨‍🎓 ${s.full_name}</h4>
+            <span class="badge" style="background:rgba(74,222,128,0.2); color:#4ade80;">STUDENT</span>
+          </div>
+        `).join('');
+    }
+async function renderProfileTab() {
       const app = document.getElementById('app');
       app.innerHTML = `
         <div class="card">
