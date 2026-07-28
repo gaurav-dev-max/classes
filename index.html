@@ -44,8 +44,8 @@
       <h2>Welcome Back</h2>
       <input type="email" id="email" placeholder="Email Address">
       <input type="password" id="password" placeholder="Password">
-      <button class="btn" id="login-btn" onclick="login()">Login</button>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="signUp()">Create Account</button>
+      <button class="btn" id="login-btn" type="button" onclick="handleLogin()">Login</button>
+      <button class="btn btn-secondary" style="margin-top:8px;" type="button" onclick="signUp()">Create Account</button>
       <div id="status" class="status-msg"></div>
     </div>
   </main>
@@ -58,58 +58,104 @@
     let currentUser = null;
     let userRole = 'student';
 
-    try {
-      db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    } catch (e) {
-      alert('Configuration Error: ' + e.message);
-    }
+    window.addEventListener('DOMContentLoaded', () => {
+      try {
+        db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      } catch (e) {
+        alert('Supabase init error: ' + e.message);
+      }
+    });
 
-    async function login() {
-      const emailInput = document.getElementById('email').value.trim();
-      const passwordInput = document.getElementById('password').value.trim();
+    async function handleLogin() {
       const status = document.getElementById('status');
-      const loginBtn = document.getElementById('login-btn');
-      
-      if (!emailInput || !passwordInput) { status.innerText = 'Please fill in both fields'; return; }
-      status.style.color = '#818cf8'; status.innerText = 'Connecting to database...';
-      loginBtn.innerText = 'Logging in...'; loginBtn.disabled = true;
+      const emailEl = document.getElementById('email');
+      const passEl = document.getElementById('password');
+      const btn = document.getElementById('login-btn');
 
-      const { data, error } = await db.auth.signInWithPassword({ email: emailInput, password: passwordInput });
-      if (error) { 
-        status.style.color = '#f87171'; status.innerText = error.message; 
-        loginBtn.innerText = 'Login'; loginBtn.disabled = false;
-      } else { 
-        currentUser = data.user;
-        await fetchProfile();
-        renderDashboard(); 
+      if (!emailEl || !passEl) {
+        alert('Input fields not found in DOM.');
+        return;
+      }
+
+      const email = emailEl.value.trim();
+      const password = passEl.value.trim();
+
+      if (!email || !password) {
+        status.style.color = '#f87171';
+        status.innerText = 'Please enter both email and password.';
+        return;
+      }
+
+      status.style.color = '#818cf8';
+      status.innerText = 'Authenticating...';
+      btn.innerText = 'Logging in...';
+      btn.disabled = true;
+
+      try {
+        if (!db) {
+          db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+
+        const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+        if (error) {
+          status.style.color = '#f87171';
+          status.innerText = error.message;
+          btn.innerText = 'Login';
+          btn.disabled = false;
+        } else {
+          currentUser = data.user;
+          await fetchProfile();
+          renderDashboard();
+        }
+      } catch (err) {
+        alert('Login execution error: ' + err.message);
+        btn.innerText = 'Login';
+        btn.disabled = false;
       }
     }
 
     async function signUp() {
-      const emailInput = document.getElementById('email').value.trim();
-      const passwordInput = document.getElementById('password').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
       const status = document.getElementById('status');
       
-      if (!emailInput || !passwordInput) { status.innerText = 'Please fill in both fields'; return; }
-      status.style.color = '#818cf8'; status.innerText = 'Creating account...';
+      if (!email || !password) { 
+        status.style.color = '#f87171';
+        status.innerText = 'Please fill in both fields'; 
+        return; 
+      }
 
-      const { data, error } = await db.auth.signUp({ email: emailInput, password: passwordInput });
-      if (error) { 
-        status.style.color = '#f87171'; status.innerText = error.message; 
-      } else { 
-        if (data.user) {
-          await db.from('profiles').insert([{ id: data.user.id, full_name: emailInput.split('@')[0], role: 'student' }]);
+      status.style.color = '#818cf8'; 
+      status.innerText = 'Creating account...';
+
+      try {
+        const { data, error } = await db.auth.signUp({ email, password });
+        if (error) { 
+          status.style.color = '#f87171'; 
+          status.innerText = error.message; 
+        } else { 
+          if (data.user) {
+            await db.from('profiles').insert([{ id: data.user.id, full_name: email.split('@')[0], role: 'student' }]);
+          }
+          status.style.color = '#4ade80'; 
+          status.innerText = 'Account created! Tap Login now.'; 
         }
-        status.style.color = '#4ade80'; status.innerText = 'Account created! Tap Login now.'; 
+      } catch (err) {
+        alert('SignUp error: ' + err.message);
       }
     }
 
     async function fetchProfile() {
       if (!currentUser) return;
-      const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).single();
-      if (data) { 
-        userRole = data.role; 
-        document.getElementById('role-badge').innerText = userRole.toUpperCase();
+      try {
+        const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).single();
+        if (data) { 
+          userRole = data.role; 
+          document.getElementById('role-badge').innerText = userRole.toUpperCase();
+        }
+      } catch (e) {
+        console.error('Profile fetch issue:', e);
       }
     }
 
@@ -379,19 +425,4 @@
 
     async function loadChapterContent(chapterId) {
       const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
-      const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
-
-      const lecTarget = document.getElementById('chapter-lectures');
-      lecTarget.innerHTML = (!lectures || lectures.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures in this chapter yet.</p>`
-        : lectures.map(l => `
-          <div class="card">
-            <h4>${l.title}</h4>
-            <div class="video-wrapper"><iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe></div>
-          </div>
-        `).join('');
-
-      const matTarget = document.getElementById('chapter-materials');
-      matTarget.innerHTML = (!materials || materials.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes in this chapter yet.</p>`
-        : materials.ma
+      const { data: materials } = aw
