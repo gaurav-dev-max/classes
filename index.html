@@ -189,12 +189,15 @@
       }
     }
 
-    async function fetchProfile() {
+        async function fetchProfile() {
       if (!currentUser) return;
       try {
         const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).maybeSingle();
-        if (data && data.role) userRole = data.role;
-        else userRole = 'student';
+        if (data && data.role) {
+          userRole = data.role;
+        } else {
+          userRole = 'student';
+        }
       } catch (e) {
         userRole = 'student';
       }
