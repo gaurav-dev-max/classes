@@ -372,7 +372,6 @@
       `).join('');
     }
 
-    // CHAPTERS VIEW
     async function openSubjectChapters(subjectId, subjectTitle, assignedTeacherId) {
       const app = document.getElementById('app');
       const canManage = (userRole === 'admin') || (userRole === 'teacher' && currentUser.id === assignedTeacherId);
@@ -420,7 +419,7 @@
       `).join('');
     }
 
-    // CHAPTER CONTENT (Lectures, Notes, Quizzes)
+    // CHAPTER CONTENT (Lectures, Notes, Assignments, Quizzes)
     async function openChapterContent(chapterId, chapterTitle, canManage) {
       const app = document.getElementById('app');
 
@@ -443,7 +442,15 @@
             <button class="btn" style="background:#0284c7;" onclick="addChapterMaterial('${chapterId}', '${chapterTitle}', ${canManage})">Publish Notes</button>
           </div>
 
-          <div class="card" style="border-color: #c084fc;">
+          <div class="card" style="border-color: #f59e0b;">
+            <h4>📝 Create Homework / Assignment</h4>
+            <input type="text" id="ass-title" placeholder="Assignment Title">
+            <textarea id="ass-desc" placeholder="Instructions / Questions"></textarea>
+            <input type="text" id="ass-url" placeholder="Resource PDF / Link (Optional)">
+            <button class="btn" style="background:#d97706;" onclick="addChapterAssignment('${chapterId}', '${chapterTitle}', ${canManage})">Publish Assignment</button>
+          </div>
+
+    <div class="card" style="border-color: #c084fc;">
             <h4>🧪 Create Chapter Quiz / Test</h4>
             <input type="text" id="test-title" placeholder="Test Title">
             <input type="text" id="test-q" placeholder="Question">
@@ -459,7 +466,7 @@
             </select>
             <button class="btn" style="background:#a855f7;" onclick="addChapterTest('${chapterId}', '${chapterTitle}', ${canManage})">Publish Quiz</button>
           </div>
- ` : ''}
+        ` : ''}
 
         <h3 style="margin-top:20px;">🎥 Video Lectures</h3>
         <div id="chapter-lectures">Loading...</div>
@@ -467,18 +474,23 @@
         <h3 style="margin-top:20px;">📄 Notes & Study Materials</h3>
         <div id="chapter-materials">Loading...</div>
 
+        <h3 style="margin-top:20px;">📝 Homework & Assignments</h3>
+        <div id="chapter-assignments">Loading...</div>
+
         <h3 style="margin-top:20px;">🧪 Quizzes & Tests</h3>
         <div id="chapter-tests">Loading...</div>
       `;
 
-      loadChapterData(chapterId);
+      loadChapterData(chapterId, canManage);
     }
 
-    async function loadChapterData(chapterId) {
+    async function loadChapterData(chapterId, canManage) {
       const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
       const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
+      const { data: assignments } = await db.from('assignments').select('*').eq('chapter_id', chapterId);
       const { data: tests } = await db.from('tests').select('*').eq('chapter_id', chapterId);
 
+      // Render Lectures
       const lecTarget = document.getElementById('chapter-lectures');
       lecTarget.innerHTML = (!lectures || lectures.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures in this chapter yet.</p>`
@@ -489,6 +501,7 @@
           </div>
         `).join('');
 
+      // Render Materials
       const matTarget = document.getElementById('chapter-materials');
       matTarget.innerHTML = (!materials || materials.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes in this chapter yet.</p>`
@@ -499,6 +512,30 @@
           </div>
         `).join('');
 
+      // Render Assignments
+      const assTarget = document.getElementById('chapter-assignments');
+      assTarget.innerHTML = (!assignments || assignments.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No assignments posted yet.</p>`
+        : assignments.map(a => `
+          <div class="card" style="border-color:rgba(245,158,11,0.4);">
+            <h4>📝 ${a.title}</h4>
+            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:10px;">${a.description || ''}</p>
+            ${a.file_url ? `<a href="${a.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-bottom:8px;">View Resource Document 📄</a>` : ''}
+
+            ${userRole === 'student' ? `
+              <div style="margin-top:10px; background:rgba(15,23,42,0.6); padding:10px; border-radius:8px;">
+                <input type="text" id="sub-url-${a.id}" placeholder="Paste PDF / Google Drive / Solution link">
+                <button class="btn" style="background:#d97706;" onclick="submitAssignment('${a.id}')">Submit Solution</button>
+              </div>
+            ` : ''}
+
+            ${canManage ? `
+              <button class="btn btn-secondary" style="margin-top:8px;" onclick="viewAssignmentSubmissions('${a.id}', '${a.title}')">Review Student Submissions 📥</button>
+            ` : ''}
+          </div>
+        `).join('');
+
+      // Render Tests
       const testTarget = document.getElementById('chapter-tests');
       testTarget.innerHTML = (!tests || tests.length === 0)
         ? `<p style="color:var(--text-sub); font-size:0.85rem;">No quizzes created for this chapter yet.</p>`
@@ -530,6 +567,71 @@
       if (!title || !file_url) { alert('Fill all fields'); return; }
       await db.from('study_materials').insert([{ chapter_id: chapterId, title, file_url }]);
       openChapterContent(chapterId, chapterTitle, canManage);
+    }
+
+    async function addChapterAssignment(chapterId, chapterTitle, canManage) {
+      const title = document.getElementById('ass-title').value;
+      const description = document.getElementById('ass-desc').value;
+      const file_url = document.getElementById('ass-url').value;
+      if (!title) { alert('Enter assignment title'); return; }
+      await db.from('assignments').insert([{ chapter_id: chapterId, title, description, file_url }]);
+      openChapterContent(chapterId, chapterTitle, canManage);
+    }
+
+    async function submitAssignment(assignmentId) {
+      const file_url = document.getElementById(`sub-url-${assignmentId}`).value;
+      if (!file_url) { alert('Please paste your solution link first.'); return; }
+
+      await db.from('assignment_submissions').insert([{
+        assignment_id: assignmentId,
+        student_id: currentUser.id,
+        file_url: file_url
+      }]);
+
+      alert('Assignment submitted successfully!');
+    }
+
+    async function viewAssignmentSubmissions(assignmentId, assignmentTitle) {
+      const app = document.getElementById('app');
+      const { data: subs } = await db.from('assignment_submissions')
+        .select('*, profiles(full_name)')
+        .eq('assignment_id', assignmentId);
+
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back</button>
+        <h2>📥 Submissions: ${assignmentTitle}</h2>
+        <div id="subs-list" style="margin-top:10px;">Loading...</div>
+      `;
+
+      const list = document.getElementById('subs-list');
+      if (!subs || subs.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub);">No student submissions recorded yet.</p>`;
+        return;
+      }
+
+      list.innerHTML = subs.map(s => `
+        <div class="card">
+          <h4>👨‍🎓 Student: ${s.profiles ? s.profiles.full_name : 'Student'}</h4>
+          <a href="${s.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin:8px 0;">View Submitted File 📄</a>
+          <div style="margin-top:10px;">
+            <input type="number" id="grade-${s.id}" placeholder="Marks (e.g. 90)" value="${s.marks_obtained || ''}">
+            <input type="text" id="feedback-${s.id}" placeholder="Teacher Feedback" value="${s.feedback || ''}">
+            <button class="btn" style="background:#10b981;" onclick="gradeSubmission('${s.id}')">Save Grade & Feedback</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function gradeSubmission(subId) {
+      const marks = document.getElementById(`grade-${subId}`).value;
+      const feedback = document.getElementById(`feedback-${subId}`).value;
+
+      await db.from('assignment_submissions').update({
+        marks_obtained: marks ? parseInt(marks) : null,
+        feedback: feedback
+      }).eq('id', subId);
+
+      alert('Grade and feedback saved!');
     }
 
     async function addChapterTest(chapterId, chapterTitle, canManage) {
@@ -597,7 +699,9 @@
       const question_text = document.getElementById('doubt-text').value;
       const image_url = document.getElementById('doubt-img').value;
 
-      if (!subject_id || !question_text) { alert('Please select a subject and type your question.'); return; }
+      if (!subject_id || !question_text)
+
+{ alert('Please select a subject and type your question.'); return; }
 
       await db.from('doubts').insert([{
         student_id: currentUser.id,
@@ -683,4 +787,3 @@
   </script>
 </body>
 </html>
-   
