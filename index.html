@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -23,6 +23,7 @@
     input:focus, textarea:focus, select:focus { border-color: var(--accent); }
     .btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 4px; display: block; text-align: center; }
     .btn-secondary { background: transparent; border: 1px solid var(--border-light); }
+    .btn-disabled { background: #334155; color: #94a3b8; cursor: not-allowed; }
     .status-msg { margin-top: 10px; font-size: 0.85rem; text-align: center; color: #f87171; font-weight: bold; }
     .badge { font-size:0.75rem; background:rgba(99,102,241,0.2); color:#818cf8; padding:4px 8px; border-radius:12px; font-weight:bold; }
     .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
@@ -113,8 +114,8 @@
       <span>Doubts</span>
     </div>
     <div class="nav-item" id="nav-fees" onclick="switchTab('fees')">
-      <span class="nav-icon">💰</span>
-      <span>Fees</span>
+      <span class="nav-icon">🔑</span>
+      <span>Unlock</span>
     </div>
     <div class="nav-item" id="nav-profile" onclick="switchTab('profile')">
       <span class="nav-icon">👤</span>
@@ -203,7 +204,8 @@
         alert('SignUp Error: ' + err.message);
       }
     }
-async function fetchProfile() {
+
+    async function fetchProfile() {
       if (!currentUser) return;
       try {
         const { data } = await db.from('profiles').select('role').eq('id', currentUser.id).maybeSingle();
@@ -281,7 +283,7 @@ async function fetchProfile() {
           <h3>⚡ Quick Actions</h3>
           <button class="btn" onclick="switchTab('courses')">📚 Browse Courses</button>
           <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('doubts')">💬 Ask / View Doubts</button>
-          <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('fees')">💰 Fee Ledgers & Payments</button>
+          ${userRole === 'admin' ? `<button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('fees')">🔑 Unlock Student Access</button>` : ''}
         </div>
 
         <h3 style="margin-top:20px;">📢 Latest Broadcasts & Announcements</h3>
@@ -353,6 +355,7 @@ async function fetchProfile() {
       }
     }
 
+    // COURSES WITH FEE LOCKING
     async function renderCoursesTab() {
       const app = document.getElementById('app');
       app.innerHTML = `
@@ -361,6 +364,7 @@ async function fetchProfile() {
             <h3>➕ Create Main Course</h3>
             <input type="text" id="course-title" placeholder="Course Title (e.g. CA Foundation)">
             <input type="text" id="course-desc" placeholder="Course Description">
+            <input type="number" id="course-price" placeholder="Course Fee / Price (e.g. 25000)">
             <button class="btn" onclick="addNewCourse()">Publish Course</button>
           </div>
         ` : ''}
@@ -374,25 +378,50 @@ async function fetchProfile() {
     async function loadCourses() {
       const list = document.getElementById('course-list');
       const { data: courses } = await db.from('courses').select('*');
+      let unlockedCourseIds = [];
+
+      if (userRole === 'student') {
+        const { data: enr } = await db.from('enrollments').select('course_id').eq('student_id', currentUser.id).eq('status', 'unlocked');
+        if (enr) unlockedCourseIds = enr.map(e => e.course_id);
+      }
+
       if (!courses || courses.length === 0) {
         list.innerHTML = `<p style="color:var(--text-sub); text-align:center;">No courses created yet.</p>`;
         return;
       }
 
-      list.innerHTML = courses.map(c => `
-        <div class="card">
-          <h4>${c.title}</h4>
-          <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:12px;">${c.description || ''}</p>
-          <button class="btn btn-secondary" onclick="openSubjectsList('${c.id}', '${c.title}')">Open Subjects ➔</button>
-        </div>
-      `).join('');
+      list.innerHTML = courses.map(c => {
+        const isUnlocked = isStaff() || (c.price == 0) || unlockedCourseIds.includes(c.id);
+
+        return `
+          <div class="card" style="border-color:${isUnlocked ? 'rgba(99,102,241,0.3)' : 'rgba(248,113,113,0.3)'};">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h4>${c.title}</h4>
+              <span class="badge" style="background:${isUnlocked ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${isUnlocked ? '#4ade80' : '#f87171'};">
+                ${isUnlocked ? 'OPEN' : '🔒 LOCKED'}
+              </span>
+            </div>
+            <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 10px 0;">${c.description || ''}</p>
+            <p style="font-size:0.9rem; margin-bottom:12px;">💰 Course Fee: <strong>${c.price > 0 ? '₹' + c.price : 'FREE'}</strong></p>
+            
+            ${isUnlocked ? `
+              <button class="btn btn-secondary" onclick="openSubjectsList('${c.id}', '${c.title}')">Open Subjects ➔</button>
+            ` : `
+              <button class="btn btn-disabled">🔒 Locked (Pay Fee to Access)</button>
+              <p style="font-size:0.75rem; color:#f87171; margin-top:6px; text-align:center;">Contact Institute Admin to pay ₹${c.price} and unlock this course.</p>
+            `}
+          </div>
+        `;
+      }).join('');
     }
 
     async function addNewCourse() {
       const title = document.getElementById('course-title').value;
       const description = document.getElementById('course-desc').value;
+      const price = document.getElementById('course-price').value || 0;
+
       if (!title) { alert('Enter title'); return; }
-      await db.from('courses').insert([{ title, description }]);
+      await db.from('courses').insert([{ title, description, price: parseFloat(price) }]);
       loadCourses();
     }
 
@@ -480,7 +509,8 @@ async function fetchProfile() {
 
       loadChapters(subjectId, canManage);
     }
- async function addChapter(subjectId, subjectTitle, assignedTeacherId) {
+
+    async function addChapter(subjectId, subjectTitle, assignedTeacherId) {
       const title = document.getElementById('chap-title').value;
       if (!title) { alert('Enter chapter title'); return; }
       await db.from('chapters').insert([{ subject_id: subjectId, title }]);
@@ -776,7 +806,7 @@ async function fetchProfile() {
         <div id="doubts-queue">Loading doubts...</div>
       `;
 
-      loadDoubtsQueue();
+    loadDoubtsQueue();
     }
 
     function filterDoubts(status) {
@@ -816,7 +846,8 @@ async function fetchProfile() {
         queue.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:20px 0;">No ${currentDoubtFilter === 'all' ? '' : currentDoubtFilter} doubts found.</p>`;
         return;
       }
-queue.innerHTML = doubts.map(d => `
+
+      queue.innerHTML = doubts.map(d => `
         <div class="card" style="border-color:${d.status === 'resolved' ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <span class="badge" style="background:${d.status === 'resolved' ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${d.status === 'resolved' ? '#4ade80' : '#f87171'};">
@@ -858,64 +889,59 @@ queue.innerHTML = doubts.map(d => `
       loadDoubtsQueue();
     }
 
-    // FEES TAB
+    // UNLOCK / UNLOCK MANAGEMENT TAB
     async function renderFeesTab() {
       const app = document.getElementById('app');
       const { data: students } = await db.from('profiles').select('id, full_name').eq('role', 'student');
+      const { data: courses } = await db.from('courses').select('id, title, price');
 
       app.innerHTML = `
-        <h2>💰 Fee Ledgers & Payments</h2>
+        <h2>🔑 Course Access & Fee Unlocks</h2>
         ${userRole === 'admin' ? `
           <div class="card" style="border-color: #10b981;">
-            <h4>💵 Record / Update Student Fee</h4>
-            <select id="fee-student">
+            <h4>🔓 Grant Course Access to Student</h4>
+            <select id="unlock-student">
               <option value="">Select Student</option>
               ${students ? students.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('') : ''}
             </select>
-            <input type="number" id="total-fee" placeholder="Total Course Fee (e.g. 50000)">
-            <input type="number" id="paid-amount" placeholder="Amount Paid So Far (e.g. 20000)">
-            <input type="date" id="due-date">
-            <button class="btn" style="background:#059669;" onclick="saveFeeRecord()">Save Fee Record</button>
+            <select id="unlock-course">
+              <option value="">Select Course</option>
+              ${courses ? courses.map(c => `<option value="${c.id}">${c.title} (₹${c.price})</option>`).join('') : ''}
+            </select>
+            <button class="btn" style="background:#059669;" onclick="grantAccess()">Unlock Course for Student</button>
           </div>
         ` : ''}
 
-        <h3 style="margin: 16px 0 10px 0;">📊 Payment Records</h3>
-        <div id="fee-list">Loading fee ledger...</div>
+        <h3 style="margin: 16px 0 10px 0;">📋 Unlocked Course Ledgers</h3>
+        <div id="unlock-list">Loading access records...</div>
       `;
 
-      loadFeeLedger();
+      loadEnrollmentLedger();
     }
 
-    async function saveFeeRecord() {
-      const student_id = document.getElementById('fee-student').value;
-      const total_fee = document.getElementById('total-fee').value;
-      const paid_amount = document.getElementById('paid-amount').value || 0;
-      const due_date = document.getElementById('due-date').value || null;
+    async function grantAccess() {
+      const student_id = document.getElementById('unlock-student').value;
+      const course_id = document.getElementById('unlock-course').value;
 
-      if (!student_id || !total_fee) { alert('Please select a student and enter total fee amount.'); return; }
+      if (!student_id || !course_id) { alert('Please select both student and course.'); return; }
 
-      const pending = parseFloat(total_fee) - parseFloat(paid_amount);
-      const status = pending <= 0 ? 'paid' : 'pending';
-
-      const { error } = await db.from('fee_records').upsert([{
+      const { error } = await db.from('enrollments').upsert([{
         student_id,
-        total_fee: parseFloat(total_fee),
-        paid_amount: parseFloat(paid_amount),
-        due_date,
-        status
+        course_id,
+        status: 'unlocked'
       }]);
 
       if (error) {
-        alert('Error saving fee: ' + error.message);
+        alert('Error unlocking course: ' + error.message);
       } else {
-        alert('Fee record updated successfully!');
+        alert('Access granted! The student can now open this course.');
         renderFeesTab();
       }
     }
 
-    async function loadFeeLedger() {
-      const list = document.getElementById('fee-list');
-      let query = db.from('fee_records').select('*, profiles!student_id(full_name)');
+    async function loadEnrollmentLedger() {
+      const list = document.getElementById('unlock-list');
+      let query = db.from('enrollments').select('*, profiles!student_id(full_name), courses!course_id(title, price)');
 
       if (userRole === 'student') {
         query = query.eq('student_id', currentUser.id);
@@ -924,32 +950,25 @@ queue.innerHTML = doubts.map(d => `
       const { data: records, error } = await query;
 
       if (error) {
-        list.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error loading fees: ${error.message}</p>`;
+        list.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error loading enrollment records: ${error.message}</p>`;
         return;
       }
 
       if (!records || records.length === 0) {
-        list.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:12px 0;">No fee records found.</p>`;
+        list.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:12px 0;">No active course unlocks recorded.</p>`;
         return;
       }
 
-      list.innerHTML = records.map(r => {
-        const remaining = parseFloat(r.total_fee) - parseFloat(r.paid_amount);
-        return `
-          <div class="card" style="border-color:${remaining <= 0 ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <h4>👨‍🎓 ${r.profiles ? r.profiles.full_name : 'Student'}</h4>
-              <span class="badge" style="background:${remaining <= 0 ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${remaining <= 0 ? '#4ade80' : '#f87171'};">
-                ${remaining <= 0 ? 'PAID IN FULL' : 'PENDING'}
-              </span>
-            </div>
-            <p style="font-size:0.9rem; color:var(--text-sub);">💵 Total Fee: <strong>₹${r.total_fee}</strong></p>
-            <p style="font-size:0.9rem; color:#4ade80;">✅ Paid So Far: <strong>₹${r.paid_amount}</strong></p>
-            <p style="font-size:0.9rem; color:#f87171;">⚠️ Remaining Due: <strong>₹${remaining > 0 ? remaining : 0}</strong></p>
-            ${r.due_date ? `<p style="font-size:0.8rem; color:var(--text-sub); margin-top:6px;">📅 Due Date: ${r.due_date}</p>` : ''}
+      list.innerHTML = records.map(r => `
+        <div class="card" style="border-color:rgba(74,222,128,0.4);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h4>👨‍🎓 ${r.profiles ? r.profiles.full_name : 'Student'}</h4>
+            <span class="badge" style="background:rgba(74,222,128,0.2); color:#4ade80;">UNLOCKED</span>
           </div>
-        `;
-      }).join('');
+          <p style="font-size:0.9rem;">📚 Course: <strong>${r.courses ? r.courses.title : 'Course'}</strong></p>
+          <p style="font-size:0.85rem; color:var(--text-sub); margin-top:4px;">💰 Course Fee Paid: ₹${r.courses ? r.courses.price : 0}</p>
+        </div>
+      `).join('');
     }
 
     async function renderProfileTab() {
