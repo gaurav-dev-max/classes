@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -112,6 +112,10 @@
       <span class="nav-icon">💬</span>
       <span>Doubts</span>
     </div>
+    <div class="nav-item" id="nav-fees" onclick="switchTab('fees')">
+      <span class="nav-icon">💰</span>
+      <span>Fees</span>
+    </div>
     <div class="nav-item" id="nav-profile" onclick="switchTab('profile')">
       <span class="nav-icon">👤</span>
       <span>Profile</span>
@@ -218,7 +222,7 @@ async function fetchProfile() {
 
     function updateNavUI(activeTab) {
       currentTab = activeTab;
-      ['home', 'courses', 'doubts', 'profile'].forEach(t => {
+      ['home', 'courses', 'doubts', 'fees', 'profile'].forEach(t => {
         const el = document.getElementById(`nav-${t}`);
         if (el) {
           if (t === activeTab) el.classList.add('active');
@@ -232,6 +236,7 @@ async function fetchProfile() {
       if (tabName === 'home') renderHomeTab();
       else if (tabName === 'courses') renderCoursesTab();
       else if (tabName === 'doubts') renderDoubtsTab();
+      else if (tabName === 'fees') renderFeesTab();
       else if (tabName === 'profile') renderProfileTab();
     }
 
@@ -276,6 +281,7 @@ async function fetchProfile() {
           <h3>⚡ Quick Actions</h3>
           <button class="btn" onclick="switchTab('courses')">📚 Browse Courses</button>
           <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('doubts')">💬 Ask / View Doubts</button>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="switchTab('fees')">💰 Fee Ledgers & Payments</button>
         </div>
 
         <h3 style="margin-top:20px;">📢 Latest Broadcasts & Announcements</h3>
@@ -382,7 +388,7 @@ async function fetchProfile() {
       `).join('');
     }
 
-async function addNewCourse() {
+    async function addNewCourse() {
       const title = document.getElementById('course-title').value;
       const description = document.getElementById('course-desc').value;
       if (!title) { alert('Enter title'); return; }
@@ -474,8 +480,7 @@ async function addNewCourse() {
 
       loadChapters(subjectId, canManage);
     }
-
-    async function addChapter(subjectId, subjectTitle, assignedTeacherId) {
+ async function addChapter(subjectId, subjectTitle, assignedTeacherId) {
       const title = document.getElementById('chap-title').value;
       if (!title) { alert('Enter chapter title'); return; }
       await db.from('chapters').insert([{ subject_id: subjectId, title }]);
@@ -562,7 +567,8 @@ async function addNewCourse() {
 
       loadChapterData(chapterId, canManage);
     }
-async function loadChapterData(chapterId, canManage) {
+
+    async function loadChapterData(chapterId, canManage) {
       const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
       const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
       const { data: assignments } = await db.from('assignments').select('*').eq('chapter_id', chapterId);
@@ -741,6 +747,7 @@ async function loadChapterData(chapterId, canManage) {
         target.innerText = `❌ Incorrect. The correct answer is Option ${correctOption}.`;
       }
     }
+
     async function renderDoubtsTab() {
       const app = document.getElementById('app');
       const { data: subjects } = await db.from('subjects').select('id, title');
@@ -809,8 +816,7 @@ async function loadChapterData(chapterId, canManage) {
         queue.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:20px 0;">No ${currentDoubtFilter === 'all' ? '' : currentDoubtFilter} doubts found.</p>`;
         return;
       }
-
-      queue.innerHTML = doubts.map(d => `
+queue.innerHTML = doubts.map(d => `
         <div class="card" style="border-color:${d.status === 'resolved' ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <span class="badge" style="background:${d.status === 'resolved' ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${d.status === 'resolved' ? '#4ade80' : '#f87171'};">
@@ -850,6 +856,100 @@ async function loadChapterData(chapterId, canManage) {
 
       alert('Doubt resolved!');
       loadDoubtsQueue();
+    }
+
+    // FEES TAB
+    async function renderFeesTab() {
+      const app = document.getElementById('app');
+      const { data: students } = await db.from('profiles').select('id, full_name').eq('role', 'student');
+
+      app.innerHTML = `
+        <h2>💰 Fee Ledgers & Payments</h2>
+        ${userRole === 'admin' ? `
+          <div class="card" style="border-color: #10b981;">
+            <h4>💵 Record / Update Student Fee</h4>
+            <select id="fee-student">
+              <option value="">Select Student</option>
+              ${students ? students.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('') : ''}
+            </select>
+            <input type="number" id="total-fee" placeholder="Total Course Fee (e.g. 50000)">
+            <input type="number" id="paid-amount" placeholder="Amount Paid So Far (e.g. 20000)">
+            <input type="date" id="due-date">
+            <button class="btn" style="background:#059669;" onclick="saveFeeRecord()">Save Fee Record</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin: 16px 0 10px 0;">📊 Payment Records</h3>
+        <div id="fee-list">Loading fee ledger...</div>
+      `;
+
+      loadFeeLedger();
+    }
+
+    async function saveFeeRecord() {
+      const student_id = document.getElementById('fee-student').value;
+      const total_fee = document.getElementById('total-fee').value;
+      const paid_amount = document.getElementById('paid-amount').value || 0;
+      const due_date = document.getElementById('due-date').value || null;
+
+      if (!student_id || !total_fee) { alert('Please select a student and enter total fee amount.'); return; }
+
+      const pending = parseFloat(total_fee) - parseFloat(paid_amount);
+      const status = pending <= 0 ? 'paid' : 'pending';
+
+      const { error } = await db.from('fee_records').upsert([{
+        student_id,
+        total_fee: parseFloat(total_fee),
+        paid_amount: parseFloat(paid_amount),
+        due_date,
+        status
+      }]);
+
+      if (error) {
+        alert('Error saving fee: ' + error.message);
+      } else {
+        alert('Fee record updated successfully!');
+        renderFeesTab();
+      }
+    }
+
+    async function loadFeeLedger() {
+      const list = document.getElementById('fee-list');
+      let query = db.from('fee_records').select('*, profiles!student_id(full_name)');
+
+      if (userRole === 'student') {
+        query = query.eq('student_id', currentUser.id);
+      }
+
+      const { data: records, error } = await query;
+
+      if (error) {
+        list.innerHTML = `<p style="color:#f87171; font-size:0.85rem;">Error loading fees: ${error.message}</p>`;
+        return;
+      }
+
+      if (!records || records.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:12px 0;">No fee records found.</p>`;
+        return;
+      }
+
+      list.innerHTML = records.map(r => {
+        const remaining = parseFloat(r.total_fee) - parseFloat(r.paid_amount);
+        return `
+          <div class="card" style="border-color:${remaining <= 0 ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <h4>👨‍🎓 ${r.profiles ? r.profiles.full_name : 'Student'}</h4>
+              <span class="badge" style="background:${remaining <= 0 ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${remaining <= 0 ? '#4ade80' : '#f87171'};">
+                ${remaining <= 0 ? 'PAID IN FULL' : 'PENDING'}
+              </span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-sub);">💵 Total Fee: <strong>₹${r.total_fee}</strong></p>
+            <p style="font-size:0.9rem; color:#4ade80;">✅ Paid So Far: <strong>₹${r.paid_amount}</strong></p>
+            <p style="font-size:0.9rem; color:#f87171;">⚠️ Remaining Due: <strong>₹${remaining > 0 ? remaining : 0}</strong></p>
+            ${r.due_date ? `<p style="font-size:0.8rem; color:var(--text-sub); margin-top:6px;">📅 Due Date: ${r.due_date}</p>` : ''}
+          </div>
+        `;
+      }).join('');
     }
 
     async function renderProfileTab() {
