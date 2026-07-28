@@ -16,17 +16,19 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
     body { background-color: var(--bg-main); color: var(--text-main); padding: 16px; min-height: 100vh; padding-bottom: 60px; }
-    header { font-size: 1.4rem; font-weight: 800; color: #818cf8; margin-bottom: 20px; text-align: center; display:flex; justify-space-between; align-items:center; }
+    header { font-size: 1.4rem; font-weight: 800; color: #818cf8; margin-bottom: 20px; text-align: center; display:flex; justify-content:space-between; align-items:center; }
     .card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
     h2, h3, h4 { margin-bottom: 10px; }
-    input, textarea { width: 100%; padding: 12px; margin-bottom: 10px; background: #0f172a; border: 1px solid var(--border-light); border-radius: 8px; color: #fff; font-size: 0.95rem; outline: none; }
-    input:focus, textarea:focus { border-color: var(--accent); }
+    input, textarea, select { width: 100%; padding: 12px; margin-bottom: 10px; background: #0f172a; border: 1px solid var(--border-light); border-radius: 8px; color: #fff; font-size: 0.95rem; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
     .btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; margin-top: 4px; }
     .btn-secondary { background: transparent; border: 1px solid var(--border-light); }
     .status-msg { margin-top: 10px; font-size: 0.85rem; text-align: center; color: #f87171; }
     .badge { font-size:0.75rem; background:rgba(99,102,241,0.2); color:#818cf8; padding:4px 8px; border-radius:12px; font-weight:bold; }
     .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
     .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .opt-label { display: block; background: rgba(15,23,42,0.6); border: 1px solid var(--border-light); padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+    .opt-label:has(input:checked) { border-color: var(--accent); background: rgba(99,102,241,0.2); }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -147,7 +149,7 @@
         <div class="card">
           <h4>${c.title}</h4>
           <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:12px;">${c.description || 'No description'}</p>
-          <button class="btn btn-secondary" onclick="openCourse('${c.id}', '${c.title}')">Manage Content & Content View ➔</button>
+          <button class="btn btn-secondary" onclick="openCourse('${c.id}', '${c.title}')">Open Course Portal ➔</button>
         </div>
       `).join('');
     }
@@ -182,6 +184,12 @@
             <input type="text" id="mat-url" placeholder="Google Drive / PDF Document Link">
             <button class="btn" onclick="addMaterial('${courseId}', '${courseTitle}')">Add Material</button>
           </div>
+
+          <div class="card" style="border-color: #38bdf8;">
+            <h4>📝 Create New Test / Quiz</h4>
+            <input type="text" id="test-title" placeholder="Test Title (e.g. Unit Test 1)">
+            <button class="btn" style="background:#0284c7;" onclick="addTest('${courseId}', '${courseTitle}')">Create Test</button>
+          </div>
         ` : ''}
 
         <h3 style="margin-top:20px;">🎥 Lectures</h3>
@@ -189,6 +197,9 @@
 
         <h3 style="margin-top:20px;">📄 Study Materials</h3>
         <div id="materials-list">Loading...</div>
+
+        <h3 style="margin-top:20px;">📝 Tests & Quizzes</h3>
+        <div id="tests-list">Loading...</div>
       `;
 
       loadCourseContent(courseId);
@@ -197,32 +208,38 @@
     async function loadCourseContent(courseId) {
       const { data: lectures } = await db.from('lectures').select('*').eq('course_id', courseId);
       const { data: materials } = await db.from('study_materials').select('*').eq('course_id', courseId);
+      const { data: tests } = await db.from('tests').select('*').eq('course_id', courseId);
 
       const lecTarget = document.getElementById('lectures-list');
-      if (!lectures || lectures.length === 0) {
-        lecTarget.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures added yet.</p>`;
-      } else {
-        lecTarget.innerHTML = lectures.map(l => `
+      lecTarget.innerHTML = (!lectures || lectures.length === 0) 
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No lectures added yet.</p>`
+        : lectures.map(l => `
           <div class="card">
             <h4>${l.title}</h4>
-            <div class="video-wrapper">
-              <iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe>
-            </div>
+            <div class="video-wrapper"><iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe></div>
           </div>
         `).join('');
-      }
 
       const matTarget = document.getElementById('materials-list');
-      if (!materials || materials.length === 0) {
-        matTarget.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No materials added yet.</p>`;
-      } else {
-        matTarget.innerHTML = materials.map(m => `
+      matTarget.innerHTML = (!materials || materials.length === 0) 
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No materials added yet.</p>`
+        : materials.map(m => `
           <div class="card">
             <h4>${m.title}</h4>
             <a href="${m.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-top:8px;">Open Document 📄</a>
           </div>
         `).join('');
-      }
+
+      const testTarget = document.getElementById('tests-list');
+      testTarget.innerHTML = (!tests || tests.length === 0) 
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No tests created yet.</p>`
+        : tests.map(t => `
+          <div class="card" style="border-color: rgba(56,189,248,0.3);">
+            <h4>${t.title}</h4>
+            ${userRole === 'admin' ? `<button class="btn" style="background:#0284c7; margin-bottom:8px;" onclick="openQuestionBuilder('${t.id}', '${t.title}')">+ Add Questions</button>` : ''}
+            <button class="btn" onclick="startTest('${t.id}', '${t.title}')">Start Test 📝</button>
+          </div>
+        `).join('');
     }
 
     function formatEmbedUrl(url) {
@@ -235,20 +252,125 @@
       const title = document.getElementById('lec-title').value;
       const video_url = document.getElementById('lec-url').value;
       if (!title || !video_url) { alert('Fill all fields'); return; }
-
       const { error } = await db.from('lectures').insert([{ course_id: courseId, title, video_url }]);
-      if (error) alert(error.message);
-      else { alert('Lecture added!'); openCourse(courseId, courseTitle); }
+      if (error) alert(error.message); else openCourse(courseId, courseTitle);
     }
 
     async function addMaterial(courseId, courseTitle) {
       const title = document.getElementById('mat-title').value;
       const file_url = document.getElementById('mat-url').value;
       if (!title || !file_url) { alert('Fill all fields'); return; }
-
       const { error } = await db.from('study_materials').insert([{ course_id: courseId, title, file_url }]);
+      if (error) alert(error.message); else openCourse(courseId, courseTitle);
+    }
+
+    async function addTest(courseId, courseTitle) {
+      const title = document.getElementById('test-title').value;
+      if (!title) { alert('Enter a test title'); return; }
+      const { error } = await db.from('tests').insert([{ course_id: courseId, title }]);
+      if (error) alert(error.message); else openCourse(courseId, courseTitle);
+    }
+
+    async function openQuestionBuilder(testId, testTitle) {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderDashboard()">← Back</button>
+        <h2>${testTitle} - Question Builder</h2>
+        <div class="card" style="border-color: #38bdf8;">
+          <h4>Add Question</h4>
+          <input type="text" id="q-text" placeholder="Question Text">
+          <input type="text" id="q-a" placeholder="Option A">
+          <input type="text" id="q-b" placeholder="Option B">
+          <input type="text" id="q-c" placeholder="Option C">
+          <input type="text" id="q-d" placeholder="Option D">
+          <select id="q-correct">
+            <option value="A">Correct Option: A</option>
+            <option value="B">Correct Option: B</option>
+            <option value="C">Correct Option: C</option>
+            <option value="D">Correct Option: D</option>
+          </select>
+          <button class="btn" style="background:#0284c7;" onclick="saveQuestion('${testId}', '${testTitle}')">Save Question</button>
+        </div>
+      `;
+    }
+
+    async function saveQuestion(testId, testTitle) {
+      const question_text = document.getElementById('q-text').value;
+      const option_a = document.getElementById('q-a').value;
+      const option_b = document.getElementById('q-b').value;
+      const option_c = document.getElementById('q-c').value;
+      const option_d = document.getElementById('q-d').value;
+      const correct_option = document.getElementById('q-correct').value;
+
+      if (!question_text || !option_a || !option_b || !option_c || !option_d) {
+        alert('Please complete all fields'); return;
+      }
+
+      const { error } = await db.from('questions').insert([{
+        test_id: testId, question_text, option_a, option_b, option_c, option_d, correct_option
+      }]);
+
       if (error) alert(error.message);
-      else { alert('Material added!'); openCourse(courseId, courseTitle); }
+      else { alert('Question added!'); openQuestionBuilder(testId, testTitle); }
+    }
+
+    async function startTest(testId, testTitle) {
+      const app = document.getElementById('app');
+      const { data: questions } = await db.from('questions').select('*').eq('test_id', testId);
+
+      if (!questions || questions.length === 0) {
+        alert('This test has no questions added yet!'); return;
+      }
+
+      app.innerHTML = `
+        <h2>📝 ${testTitle}</h2>
+        <form id="test-form">
+          ${questions.map((q, idx) => `
+            <div class="card">
+              <h4>Q${idx + 1}. ${q.question_text}</h4>
+              <label class="opt-label"><input type="radio" name="q_${q.id}" value="A"> A) ${q.option_a}</label>
+              <label class="opt-label"><input type="radio" name="q_${q.id}" value="B"> B) ${q.option_b}</label>
+              <label class="opt-label"><input type="radio" name="q_${q.id}" value="C"> C) ${q.option_c}</label>
+              <label class="opt-label"><input type="radio" name="q_${q.id}" value="D"> D) ${q.option_d}</label>
+            </div>
+          `).join('')}
+          <button type="button" class="btn" onclick="submitTest('${testId}', '${questions.length}')">Submit Test</button>
+        </form>
+      `;
+
+      window.activeQuestions = questions;
+    }
+
+    async function submitTest(testId, totalCount) {
+      const questions = window.activeQuestions;
+      let score = 0;
+
+      questions.forEach(q => {
+        const selected = document.querySelector(`input[name="q_${q.id}"]:checked`);
+        if (selected && selected.value === q.correct_option) {
+          score++;
+        }
+      });
+
+      const percentage = ((score / totalCount) * 100).toFixed(1);
+
+      await db.from('test_attempts').insert([{
+        test_id: testId,
+        student_id: currentUser.id,
+        score: score,
+        total_marks: totalCount,
+        percentage: percentage
+      }]);
+
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="card" style="text-align:center;">
+          <h2 style="color:#4ade80;">🎉 Test Submitted!</h2>
+          <div style="font-size: 2.5rem; margin: 16px 0; font-weight:800;">${score} / ${totalCount}</div>
+          <p style="color:var(--text-sub);">Score Percentage: <strong>${percentage}%</strong></p>
+          <button class="btn btn-secondary" style="margin-top:20px;" onclick="renderDashboard()">Back to Dashboard</button>
+        </div>
+      `;
     }
   </script>
 </body>
