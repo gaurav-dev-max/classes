@@ -27,6 +27,8 @@
     .badge { font-size:0.75rem; background:rgba(99,102,241,0.2); color:#818cf8; padding:4px 8px; border-radius:12px; font-weight:bold; }
     .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
     .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .opt-label { display: block; background: rgba(15,23,42,0.6); border: 1px solid var(--border-light); padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+    .opt-label:has(input:checked) { border-color: var(--accent); background: rgba(99,102,241,0.2); }
 
     /* Bottom Navigation Styling */
     .bottom-nav {
@@ -82,7 +84,6 @@
     </div>
   </main>
 
-  <!-- Bottom Navigation Bar (Hidden on login screen) -->
   <nav id="bottom-bar" class="bottom-nav" style="display: none;">
     <div class="nav-item active" id="nav-home" onclick="switchTab('home')">
       <span class="nav-icon">🏠</span>
@@ -366,54 +367,203 @@
           <p style="color:var(--text-sub); font-size:0.85rem; margin:6px 0 12px 0;">
             👨‍🏫 Teacher: <strong>${s.profiles ? s.profiles.full_name : 'Unassigned'}</strong>
           </p>
-          <button class="btn" onclick="openSubjectPortal('${s.id}', '${s.title}', '${s.teacher_id}')">Open Content Hub ➔</button>
+          <button class="btn" onclick="openSubjectChapters('${s.id}', '${s.title}', '${s.teacher_id}')">Open Chapters ➔</button>
         </div>
       `).join('');
     }
 
-    async function openSubjectPortal(subjectId, subjectTitle, assignedTeacherId) {
+    // CHAPTERS VIEW
+    async function openSubjectChapters(subjectId, subjectTitle, assignedTeacherId) {
       const app = document.getElementById('app');
       const canManage = (userRole === 'admin') || (userRole === 'teacher' && currentUser.id === assignedTeacherId);
 
       app.innerHTML = `
         <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back</button>
-        <h2>📖 ${subjectTitle}</h2>
+        <h2>📖 Subject: ${subjectTitle}</h2>
+
+        ${canManage ? `
+          <div class="card" style="border-color: #c084fc;">
+            <h4>📌 Add New Chapter</h4>
+            <input type="text" id="chap-title" placeholder="Chapter Title (e.g. Chapter 1: Introduction)">
+            <button class="btn" style="background:#a855f7;" onclick="addChapter('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Chapter</button>
+          </div>
+        ` : ''}
+
+        <h3 style="margin-top:20px;">📂 Chapters</h3>
+        <div id="chapters-list">Loading chapters...</div>
+      `;
+
+      loadChapters(subjectId, canManage);
+    }
+
+    async function addChapter(subjectId, subjectTitle, assignedTeacherId) {
+      const title = document.getElementById('chap-title').value;
+      if (!title) { alert('Enter chapter title'); return; }
+      await db.from('chapters').insert([{ subject_id: subjectId, title }]);
+      openSubjectChapters(subjectId, subjectTitle, assignedTeacherId);
+    }
+
+    async function loadChapters(subjectId, canManage) {
+      const { data: chapters } = await db.from('chapters').select('*').eq('subject_id', subjectId);
+      const list = document.getElementById('chapters-list');
+
+      if (!chapters || chapters.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-sub); font-size:0.85rem;">No chapters added yet.</p>`;
+        return;
+      }
+
+      list.innerHTML = chapters.map(c => `
+        <div class="card" style="border-color:rgba(192,132,252,0.3);">
+          <h4>📌 ${c.title}</h4>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="openChapterContent('${c.id}', '${c.title}', ${canManage})">Open Chapter Content ➔</button>
+        </div>
+      `).join('');
+    }
+
+    // CHAPTER CONTENT (Lectures, Notes, Quizzes)
+    async function openChapterContent(chapterId, chapterTitle, canManage) {
+      const app = document.getElementById('app');
+
+      app.innerHTML = `
+        <button class="btn btn-secondary" style="width:auto; padding:6px 12px; margin-bottom:12px;" onclick="renderCoursesTab()">← Back</button>
+        <h2>📌 ${chapterTitle}</h2>
 
         ${canManage ? `
           <div class="card" style="border-color: var(--accent);">
             <h4>🎥 Add Video Lecture</h4>
             <input type="text" id="lec-title" placeholder="Lecture Title">
             <input type="text" id="lec-url" placeholder="YouTube Video URL">
-            <button class="btn" onclick="addSubjectLecture('${subjectId}', '${subjectTitle}', '${assignedTeacherId}')">Publish Lecture</button>
+            <button class="btn" onclick="addChapterLecture('${chapterId}', '${chapterTitle}', ${canManage})">Publish Lecture</button>
           </div>
-        ` : ''}
+
+          <div class="card" style="border-color: #38bdf8;">
+            <h4>📄 Add Study Material / PDF Notes</h4>
+            <input type="text" id="mat-title" placeholder="Material Title">
+            <input type="text" id="mat-url" placeholder="Google Drive Link / PDF URL">
+            <button class="btn" style="background:#0284c7;" onclick="addChapterMaterial('${chapterId}', '${chapterTitle}', ${canManage})">Publish Notes</button>
+          </div>
+
+          <div class="card" style="border-color: #c084fc;">
+            <h4>🧪 Create Chapter Quiz / Test</h4>
+            <input type="text" id="test-title" placeholder="Test Title">
+            <input type="text" id="test-q" placeholder="Question">
+            <input type="text" id="opt-a" placeholder="Option A">
+            <input type="text" id="opt-b" placeholder="Option B">
+            <input type="text" id="opt-c" placeholder="Option C">
+            <input type="text" id="opt-d" placeholder="Option D">
+            <select id="correct-opt">
+              <option value="A">Correct Option: A</option>
+              <option value="B">Correct Option: B</option>
+              <option value="C">Correct Option: C</option>
+              <option value="D">Correct Option: D</option>
+            </select>
+            <button class="btn" style="background:#a855f7;" onclick="addChapterTest('${chapterId}', '${chapterTitle}', ${canManage})">Publish Quiz</button>
+          </div>
+ ` : ''}
 
         <h3 style="margin-top:20px;">🎥 Video Lectures</h3>
-        <div id="subject-lectures">Loading...</div>
+        <div id="chapter-lectures">Loading...</div>
+
+        <h3 style="margin-top:20px;">📄 Notes & Study Materials</h3>
+        <div id="chapter-materials">Loading...</div>
+
+        <h3 style="margin-top:20px;">🧪 Quizzes & Tests</h3>
+        <div id="chapter-tests">Loading...</div>
       `;
 
-      loadSubjectContent(subjectId);
+      loadChapterData(chapterId);
     }
 
-    async function loadSubjectContent(subjectId) {
-      const { data: lectures } = await db.from('lectures').select('*').eq('subject_id', subjectId);
-      const lecTarget = document.getElementById('subject-lectures');
+    async function loadChapterData(chapterId) {
+      const { data: lectures } = await db.from('lectures').select('*').eq('chapter_id', chapterId);
+      const { data: materials } = await db.from('study_materials').select('*').eq('chapter_id', chapterId);
+      const { data: tests } = await db.from('tests').select('*').eq('chapter_id', chapterId);
+
+      const lecTarget = document.getElementById('chapter-lectures');
       lecTarget.innerHTML = (!lectures || lectures.length === 0)
-        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures uploaded yet.</p>`
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No video lectures in this chapter yet.</p>`
         : lectures.map(l => `
           <div class="card">
             <h4>${l.title}</h4>
             <div class="video-wrapper"><iframe src="${formatEmbedUrl(l.video_url)}" frameborder="0" allowfullscreen></iframe></div>
           </div>
         `).join('');
+
+      const matTarget = document.getElementById('chapter-materials');
+      matTarget.innerHTML = (!materials || materials.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No notes in this chapter yet.</p>`
+        : materials.map(m => `
+          <div class="card">
+            <h4>${m.title}</h4>
+            <a href="${m.file_url}" target="_blank" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none; margin-top:8px;">View Document 📄</a>
+          </div>
+        `).join('');
+
+      const testTarget = document.getElementById('chapter-tests');
+      testTarget.innerHTML = (!tests || tests.length === 0)
+        ? `<p style="color:var(--text-sub); font-size:0.85rem;">No quizzes created for this chapter yet.</p>`
+        : tests.map(t => `
+          <div class="card" style="border-color:rgba(192,132,252,0.4);">
+            <h4>🧪 ${t.title}</h4>
+            <p style="margin:8px 0; font-size:0.95rem;"><strong>Q:</strong> ${t.question}</p>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="A"> A) ${t.option_a}</label>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="B"> B) ${t.option_b}</label>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="C"> C) ${t.option_c}</label>
+            <label class="opt-label"><input type="radio" name="test-${t.id}" value="D"> D) ${t.option_d}</label>
+            <button class="btn" style="background:#a855f7;" onclick="submitQuiz('${t.id}', '${t.correct_option}')">Submit Answer</button>
+            <div id="quiz-res-${t.id}" style="margin-top:8px; font-weight:bold; text-align:center;"></div>
+          </div>
+        `).join('');
     }
 
-    async function addSubjectLecture(subjectId, subjectTitle, assignedTeacherId) {
+    async function addChapterLecture(chapterId, chapterTitle, canManage) {
       const title = document.getElementById('lec-title').value;
       const video_url = document.getElementById('lec-url').value;
       if (!title || !video_url) { alert('Fill all fields'); return; }
-      await db.from('lectures').insert([{ subject_id: subjectId, title, video_url }]);
-      openSubjectPortal(subjectId, subjectTitle, assignedTeacherId);
+      await db.from('lectures').insert([{ chapter_id: chapterId, title, video_url }]);
+      openChapterContent(chapterId, chapterTitle, canManage);
+    }
+
+    async function addChapterMaterial(chapterId, chapterTitle, canManage) {
+      const title = document.getElementById('mat-title').value;
+      const file_url = document.getElementById('mat-url').value;
+      if (!title || !file_url) { alert('Fill all fields'); return; }
+      await db.from('study_materials').insert([{ chapter_id: chapterId, title, file_url }]);
+      openChapterContent(chapterId, chapterTitle, canManage);
+    }
+
+    async function addChapterTest(chapterId, chapterTitle, canManage) {
+      const title = document.getElementById('test-title').value;
+      const question = document.getElementById('test-q').value;
+      const option_a = document.getElementById('opt-a').value;
+      const option_b = document.getElementById('opt-b').value;
+      const option_c = document.getElementById('opt-c').value;
+      const option_d = document.getElementById('opt-d').value;
+      const correct_option = document.getElementById('correct-opt').value;
+
+      if (!title || !question || !option_a || !option_b) { alert('Fill required fields'); return; }
+
+      await db.from('tests').insert([{
+        chapter_id: chapterId,
+        title, question, option_a, option_b, option_c, option_d, correct_option
+      }]);
+
+      alert('Chapter Quiz published!');
+      openChapterContent(chapterId, chapterTitle, canManage);
+    }
+
+    function submitQuiz(testId, correctOption) {
+      const selected = document.querySelector(`input[name="test-${testId}"]:checked`);
+      const target = document.getElementById(`quiz-res-${testId}`);
+      if (!selected) { alert('Please select an option first.'); return; }
+
+      if (selected.value === correctOption) {
+        target.style.color = '#4ade80';
+        target.innerText = '✅ Correct Answer! Great job!';
+      } else {
+        target.style.color = '#f87171';
+        target.innerText = `❌ Incorrect. The correct answer is Option ${correctOption}.`;
+      }
     }
 
     async function renderDoubtsTab() {
@@ -471,7 +621,7 @@
         return;
       }
 
-   queue.innerHTML = doubts.map(d => `
+      queue.innerHTML = doubts.map(d => `
         <div class="card" style="border-color:${d.status === 'resolved' ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'};">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <span class="badge" style="background:${d.status === 'resolved' ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}; color:${d.status === 'resolved' ? '#4ade80' : '#f87171'};">
@@ -533,3 +683,4 @@
   </script>
 </body>
 </html>
+   
